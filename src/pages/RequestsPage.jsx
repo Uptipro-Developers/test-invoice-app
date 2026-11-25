@@ -339,116 +339,70 @@ export default function RequestsPage({ profile }) {
 
   return (
     <div className={styles.container}>
-      {/* Left Sidebar Navigation */}
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarHeader}>
-          <h2 className={styles.sidebarTitle}>
-            <Inbox className={styles.sidebarIcon} />
-            Requests
-          </h2>
+      <header className={styles.pageHeader}>
+        <div>
+          <p className={styles.kicker}>Requests</p>
+          <h1 className={styles.pageTitle}>Requests</h1>
+          <p className={styles.pageSubtitle}>Review ERP requests, add pricing, and send quotes or invoices.</p>
         </div>
+      </header>
 
-        <nav className={styles.nav}>
-          <button
-            className={`${styles.navItem} ${selectedCategory === "all" ? styles.navItemActive : ""}`}
-            onClick={() => setSelectedCategory("all")}
-          >
-            <Inbox size={20} />
-            <span>All Requests</span>
-          </button>
-          <button
-            className={`${styles.navItem} ${selectedCategory === "received" ? styles.navItemActive : ""}`}
-            onClick={() => setSelectedCategory("received")}
-          >
-            <Inbox size={20} />
-            <span>Received</span>
-          </button>
-          <button
-            className={`${styles.navItem} ${selectedCategory === "sent" ? styles.navItemActive : ""}`}
-            onClick={() => setSelectedCategory("sent")}
-          >
-            <CheckCircle2 size={20} />
-            <span>Sent</span>
-          </button>
-        </nav>
-
-        <div className={styles.sidebarFooter}>
-          <div className={styles.infoCard}>
-            <span className={styles.infoIcon}>ℹ️</span>
-            <p className={styles.infoText}>
-              Requests from ERP are pre-filled. Add pricing and tax before
-              submitting.
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className={styles.main}>
-        {/* Header */}
-        <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <h1 className={styles.pageTitle}>
-              {selectedCategory === "all"
-                ? "All Requests"
-                : selectedCategory === "sent"
-                  ? "Sent Requests"
-                  : selectedCategory.charAt(0).toUpperCase() +
-                    selectedCategory.slice(1)}
-            </h1>
-            <span className={styles.resultCount}>
-              {filteredRequests.length}{" "}
-              {filteredRequests.length === 1 ? "request" : "requests"}
-            </span>
-          </div>
-
-          <div className={styles.headerRight}>
-            <div className={styles.searchBox}>
-              <Search size={20} />
-              <input
-                type="text"
-                placeholder="Search requests..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={styles.searchInput}
-              />
-            </div>
+      <div className={styles.toolbar}>
+        <div className={styles.tabs}>
+          {[
+            { id: "all", label: "All requests" },
+            { id: "received", label: "Received" },
+            { id: "sent", label: "Sent" },
+          ].map((t) => (
             <button
-              className={styles.refreshButton}
-              onClick={() => setLoading(true)}
+              key={t.id}
+              className={`${styles.tab} ${selectedCategory === t.id ? styles.tabActive : ""}`}
+              onClick={() => setSelectedCategory(t.id)}
             >
-              <RefreshCw size={18} />
-              Refresh
+              {t.label}
+              <span className={styles.tabCount}>
+                {t.id === "all" ? requests.length : requests.filter((r) => t.id === "sent" ? r.status === "invoice_created" : r.status !== "invoice_created").length}
+              </span>
             </button>
-          </div>
+          ))}
         </div>
-
-        {/* Info Banner */}
-        <div className={styles.infoBanner}>
-          <span className={styles.infoBannerIcon}>💡</span>
-          <p className={styles.infoBannerText}>
-            <strong>ERP Integration Active:</strong> Request details are
-            automatically populated from your ERP system. Review the
-            information, add pricing and tax values, then submit to create an
-            invoice.
-          </p>
+        <div className={styles.headerRight}>
+          <div className={styles.searchBox}>
+            <Search size={18} />
+            <input
+              type="text"
+              placeholder="Search requests..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={styles.searchInput}
+            />
+          </div>
+          <button className={styles.refreshButton} onClick={() => setLoading(true)}>
+            <RefreshCw size={16} /> Refresh
+          </button>
         </div>
+      </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className={styles.loadingState}>
-            <div className={styles.loader}></div>
-            <p>Syncing with ERP system...</p>
-          </div>
-        )}
+      <div className={styles.infoBanner}>
+        <span className={styles.infoBannerIcon}>💡</span>
+        <p className={styles.infoBannerText}>
+          <strong>ERP integration:</strong> Request details are pre-filled. Review, add pricing and tax, then submit.
+        </p>
+      </div>
 
-        {/* Error */}
-        {error && (
-          <div className={styles.errorState}>
-            <div className={styles.errorIcon}>⚠️</div>
-            <p className={styles.errorText}>{error}</p>
-          </div>
-        )}
+      {loading && (
+        <div className={styles.loadingState}>
+          <div className={styles.loader}></div>
+          <p>Syncing requests...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className={styles.errorState}>
+          <div className={styles.errorIcon}>⚠️</div>
+          <p className={styles.errorText}>{error}</p>
+        </div>
+      )}
 
         {/* Empty State */}
         {!loading && !error && filteredRequests.length === 0 && (
@@ -707,7 +661,6 @@ export default function RequestsPage({ profile }) {
             })}
           </div>
         )}
-      </main>
 
       {submitRequest && (
         <div
@@ -737,16 +690,16 @@ export default function RequestsPage({ profile }) {
             }}
           >
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #eef0f3" }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#0f172a" }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1a1a2e" }}>
                 Send quote to BuildOS
               </h3>
-              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#64748b" }}>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#666" }}>
                 {submitRequest.requestNumber} · {submitRequest.title}
               </p>
             </div>
 
             <div style={{ padding: "18px 24px" }}>
-              <p style={{ margin: "0 0 14px", fontSize: 14, color: "#334155" }}>
+              <p style={{ margin: "0 0 14px", fontSize: 14, color: "#444" }}>
                 Your priced response will be sent back to BuildOS
                 {submitRequest.buildos_event === "purchase-order.created"
                   ? " as a purchase invoice"
@@ -754,7 +707,7 @@ export default function RequestsPage({ profile }) {
                 , and the invoice builder will open pre-filled.
               </p>
 
-              <div style={{ fontSize: 14, color: "#334155" }}>
+              <div style={{ fontSize: 14, color: "#444" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
                   <span>Subtotal</span>
                   <span>{formatAmount(calculateSubtotal(submitRequest))}</span>
@@ -771,7 +724,7 @@ export default function RequestsPage({ profile }) {
                     marginTop: 6,
                     borderTop: "1px solid #eef0f3",
                     fontWeight: 700,
-                    color: "#0f172a",
+                    color: "#1a1a2e",
                   }}
                 >
                   <span>Total</span>

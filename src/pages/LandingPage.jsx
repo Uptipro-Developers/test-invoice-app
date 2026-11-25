@@ -1,23 +1,61 @@
 import { useState } from "react";
+import { motion as Motion, useReducedMotion } from "motion/react";
 import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
-  Zap,
-  Shield,
-  Smartphone,
-  MessageCircle,
-  BarChart3,
-  Star,
+  PenLine,
+  ShieldCheck,
+  Activity,
+  Bell,
+  MessagesSquare,
+  FileText,
 } from "lucide-react";
-import ParticleBackground from "../components/ParticleBackground";
+import CreateInvoiceAnimation from "../components/CreateInvoiceAnimation";
 import styles from "./LandingPage.module.css";
+
+const heroContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.12, delayChildren: 0.15 } },
+};
+
+const heroItem = {
+  hidden: { opacity: 0, y: 28 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
+// The copy column itself fades in first; its children then stagger in.
+const heroCopyContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.12, delayChildren: 0.15 },
+  },
+};
+
+function Reveal({ children, delay = 0, className }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <Motion.div
+      className={className}
+      initial={reduceMotion ? false : { opacity: 0, y: 32 }}
+      whileInView={reduceMotion ? false : { opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
+    >
+      {children}
+    </Motion.div>
+  );
+}
 
 export default function LandingPage({
   onGetStarted,
   onLogin,
   onNavigate,
-  invoiceCount,
 }) {
   const [activeFaq, setActiveFaq] = useState(null);
 
@@ -28,98 +66,114 @@ export default function LandingPage({
 
   const features = [
     {
-      icon: BarChart3,
-      title: "Create Invoices",
-      description:
-        "Build professional invoices in minutes with our intuitive builder. No accounting knowledge required.",
+      icon: FileText,
+      title: "Create",
+      description: "From a blank detail to a polished PDF in minutes, not days.",
+      wide: true,
     },
     {
-      icon: MessageCircle,
-      title: "Track Everything",
-      description:
-        "Monitor all your invoices, requests, and negotiations from one centralized dashboard.",
+      icon: MessagesSquare,
+      title: "Negotiate",
+      description: "Counterterms, approvals and closes in one thread.",
     },
     {
-      icon: Zap,
-      title: "Negotiate Easily",
-      description:
-        "Communicate with clients directly through the platform. Negotiate terms and close deals faster.",
+      icon: Activity,
+      title: "Track",
+      description: "Every invoice and every status in one calm place.",
     },
     {
-      icon: Smartphone,
-      title: "Smart Notifications",
-      description:
-        "Never miss an update. Get notified about invoice status changes, requests, and messages.",
+      icon: Bell,
+      title: "Notify",
+      description: "Deals move without you chasing follow-ups.",
     },
     {
-      icon: Shield,
-      title: "Mobile Friendly",
-      description:
-        "Access your invoices anywhere. Works perfectly on desktop, tablet, and mobile devices.",
+      icon: PenLine,
+      title: "Sign",
+      description: "Signature and signer captured on the document.",
     },
     {
-      icon: Star,
-      title: "Secure & Private",
-      description:
-        "Your data is encrypted and secure. We prioritize your privacy and data protection.",
+      icon: ShieldCheck,
+      title: "Secure",
+      description: "Consent-gated storage for every invoice payload.",
+      full: true,
     },
   ];
 
   const faqs = [
     {
-      question: "Is this really free?",
-      answer:
-        "Yes! Our core invoice creation and management features are completely free. You can create unlimited invoices without any cost.",
+      question: "Is it really free?",
+      answer: "Yes. The core create, negotiate and send flow is free forever. No credit card, no per-invoice fee.",
     },
     {
       question: "Do I need accounting knowledge?",
-      answer:
-        "Not at all! Our platform is designed for everyone. We guide you through each step with helpful tips and explanations.",
+      answer: "Not at all. The builder guides you from raw details to a professional invoice without any accounting background.",
     },
     {
-      question: "Can I customize my invoices?",
-      answer:
-        "Absolutely! Add your logo, customize colors, include notes, and tailor every invoice to match your brand.",
+      question: "Can I customize the invoices?",
+      answer: "Yes. Add your logo, notes, taxes and signature, and preview before sending. Every invoice can carry your own tone.",
     },
     {
-      question: "How do I receive invoice requests?",
-      answer:
-        "If your company uses our ERP integration, invoice requests will appear automatically in your Requests page. Review and convert them to invoices with one click.",
-    },
-    {
-      question: "Can I negotiate invoice amounts?",
-      answer:
-        "Yes! Our Negotiation feature lets you communicate with clients, propose different amounts, and reach agreements directly in the platform.",
+      question: "How do negotiations work?",
+      answer: "On the invoice itself. Counterterms, approval threads and closes stay in one conversation per deal.",
     },
     {
       question: "What formats can I export in?",
-      answer:
-        "Download invoices as PDF, export data to Excel, or send directly via email. Multiple formats for different needs.",
+      answer: "PDF for sending and Excel for records, plus direct email delivery from the same preview.",
+    },
+    {
+      question: "How is my data handled?",
+      answer: "Invoice payloads are only stored after the privacy confirmation, and only with the details you entered.",
     },
   ];
 
-  const logos = [
-    "Buyops",
-    "Urbco",
-    "BuildOS",
-    "Uptipro",
-    "SImpli",
-    "Raycast",
-    "DooSign",
-    "Bloom",
+  const stats = [
+    { value: "2", suffix: "min", label: "average invoice build" },
+    { value: "100", suffix: "%", label: "free forever" },
+    { value: "0", suffix: "", label: "spreadsheets needed" },
   ];
+
+  const heroCtas = (
+    <Motion.div className={styles.heroCtas} variants={heroItem}>
+      <button className={styles.btnPrimary} onClick={handleGetStarted}>
+        Create Invoice <ArrowRight size={18} />
+      </button>
+      <button className={styles.btnGhost} onClick={onLogin}>
+        Sign In / Sign Up
+      </button>
+    </Motion.div>
+  );
+
+  const heroCopy = (
+    <Motion.div className={styles.heroCopy} variants={heroCopyContainer}>
+      <Motion.p className={styles.heroEyebrow} variants={heroItem}>
+        The calm way to invoice
+      </Motion.p>
+      <Motion.h1 className={styles.heroTitle} variants={heroItem}>
+        <span className={styles.heroTitleLine}>Invoices that</span>
+        <span className={`${styles.heroTitleLine} ${styles.heroTitleAccent}`}>
+          get paid.
+        </span>
+      </Motion.h1>
+      <Motion.p className={styles.heroSubtitle} variants={heroItem}>
+        Create professional invoices in minutes, negotiate with clients in-app,
+        and get paid. No spreadsheets, no awkward emails.
+      </Motion.p>
+      {heroCtas}
+    </Motion.div>
+  );
+
+  const heroMedia = (
+    <Motion.div className={styles.heroMedia} variants={heroItem}>
+      <CreateInvoiceAnimation />
+    </Motion.div>
+  );
 
   return (
     <div className={styles.container}>
-      {/* Navigation */}
       <nav className={styles.nav}>
-        <div className={styles.navContainer}>
+        <div className={styles.navInner}>
           <div className={styles.logo}>
-            <img
-              src="/logo-full.png"
-              alt="sabiquot"
-              className={styles.logoImage}
-            />
+            <img src="/logo-full.png" alt="sabiquot" className={styles.logoImage} />
           </div>
           <div className={styles.navLinks}>
             <a href="#features" className={styles.navLink}>
@@ -128,244 +182,173 @@ export default function LandingPage({
             <a href="#how-it-works" className={styles.navLink}>
               How It Works
             </a>
-            <a href="#tutorials" className={styles.navLink}>
-              Tutorials
-            </a>
             <a href="#faqs" className={styles.navLink}>
               FAQs
             </a>
           </div>
           <div className={styles.navActions}>
-            <div className={styles.invoiceCount}>
-              <span className={styles.invoiceCountNumber}>
-                {(invoiceCount || 10000).toLocaleString()}+
-              </span>
-              <span className={styles.invoiceCountLabel}>Invoices Created</span>
-            </div>
-            <button className={styles.signInButton} onClick={onLogin}>
-              Sign In
+            <button className={styles.btnGhost} onClick={onLogin}>
+              Sign In / Sign Up
             </button>
-            <button className={styles.signUpButton} onClick={handleGetStarted}>
+            <button className={styles.btnPrimary} onClick={handleGetStarted}>
               Create Invoice
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section with Particle Animation */}
       <section className={styles.hero}>
-        <ParticleBackground />
-
-        <div className={styles.heroContent}>
-          <div className={styles.heroBadge}>
-            <Star size={14} />
-            <span>Trusted by 10,000+ businesses</span>
-          </div>
-          <h1 className={styles.heroTitle}>
-            Rebooting the
-            <br />
-            <span className={styles.heroTitleHighlight}>
-              Invoice Experience.
-            </span>
-          </h1>
-          <p className={styles.heroSubtitle}>
-            We're not building another invoicing platform. We're building a
-            place where businesses thrive. Create, manage, and negotiate
-            invoices effortlessly.
-          </p>
-          <div className={styles.heroButtons}>
-            <button className={styles.heroPrimary} onClick={handleGetStarted}>
-              Create Invoice <ArrowRight size={18} />
-            </button>
-            <button className={styles.heroSecondary} onClick={onLogin}>
-              Sign In
-            </button>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className={styles.stats}>
-          <div className={styles.stat}>
-            <span className={styles.statNumber}>
-              {(invoiceCount || 10000).toLocaleString()}+
-            </span>
-            <span className={styles.statLabel}>Invoices Created</span>
-          </div>
-          <div className={styles.statDivider}></div>
-          <div className={styles.stat}>
-            <span className={styles.statNumber}>100%</span>
-            <span className={styles.statLabel}>Free Forever</span>
-          </div>
-          <div className={styles.statDivider}></div>
-          <div className={styles.stat}>
-            <span className={styles.statNumber}>2 min</span>
-            <span className={styles.statLabel}>Average Creation Time</span>
-          </div>
-        </div>
+        <Motion.div
+          className={styles.heroGrid}
+          variants={heroContainer}
+          initial="hidden"
+          animate="show"
+        >
+          {heroCopy}
+          {heroMedia}
+        </Motion.div>
       </section>
 
-      {/* Logo Strip */}
-      <section className={styles.logoStrip}>
-        <div className={styles.logoStripTrack}>
-          <div className={styles.logoStripContent}>
-            {logos.map((logo, index) => (
-              <span key={`logo1-${index}`} className={styles.logoItem}>
-                {logo}
-              </span>
-            ))}
-            {logos.map((logo, index) => (
-              <span key={`logo2-${index}`} className={styles.logoItem}>
-                {logo}
-              </span>
-            ))}
-            {logos.map((logo, index) => (
-              <span key={`logo3-${index}`} className={styles.logoItem}>
-                {logo}
-              </span>
-            ))}
+      <section className={styles.stats}>
+        {stats.map((stat) => (
+          <div key={stat.label} className={styles.stat}>
+            <span className={styles.statValue}>
+              {stat.value}
+              <span className={styles.statSuffix}>{stat.suffix}</span>
+            </span>
+            <span className={styles.statLabel}>{stat.label}</span>
           </div>
-        </div>
+        ))}
       </section>
 
-      {/* Features Section */}
       <section id="features" className={styles.features}>
-        <h2 className={styles.sectionTitle}>Everything You Need</h2>
-        <p className={styles.sectionSubtitle}>
-          Powerful features wrapped in a simple, intuitive interface
-        </p>
+        <Reveal className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>One calm workspace for the whole deal</h2>
+          <p className={styles.sectionSubtitle}>
+            From first draft to paid, every step of your invoicing workflow lives
+            in a single place.
+          </p>
+        </Reveal>
         <div className={styles.featuresGrid}>
           {features.map((feature, index) => (
-            <div key={index} className={styles.featureCard}>
-              <div className={styles.featureIconWrapper}>
+            <Reveal
+              key={feature.title}
+              delay={index * 0.05}
+              className={`${styles.featureCard} ${
+                feature.wide ? styles.featureCardWide : ""
+              } ${feature.full ? styles.featureCardFull : ""}`}
+            >
+              <div className={styles.featureIconWrap}>
                 <feature.icon className={styles.featureIcon} />
               </div>
               <h3 className={styles.featureTitle}>{feature.title}</h3>
               <p className={styles.featureDescription}>{feature.description}</p>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="how-it-works" className={styles.howItWorks}>
-        <h2 className={styles.sectionTitle}>How It Works</h2>
+      <section id="how-it-works" className={`${styles.howItWorks} ${styles.sectionBand}`}>
+        <Reveal className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>From first hello to paid in three moves</h2>
+        </Reveal>
         <div className={styles.steps}>
-          <div className={styles.step}>
-            <div className={styles.stepNumber}>1</div>
-            <h3>Enter Details</h3>
-            <p>Fill in your company info, client details, and invoice items</p>
-          </div>
-          <div className={styles.stepConnector}></div>
-          <div className={styles.step}>
-            <div className={styles.stepNumber}>2</div>
-            <h3>Review & Customize</h3>
-            <p>Preview your invoice, add logo, and customize as needed</p>
-          </div>
-          <div className={styles.stepConnector}></div>
-          <div className={styles.step}>
-            <div className={styles.stepNumber}>3</div>
-            <h3>Send or Download</h3>
-            <p>Export as PDF, send via email, or save for later</p>
-          </div>
+          {[
+            {
+              no: "01",
+              title: "Enter details",
+              description: "Client, items and prices go in. The builder drafts the invoice.",
+            },
+            {
+              no: "02",
+              title: "Customize",
+              description: "Add logo, notes, taxes and signature. Preview before sending.",
+            },
+            {
+              no: "03",
+              title: "Send",
+              description: "Export, email or save. The deal keeps moving.",
+            },
+          ].map((step, index) => (
+            <Reveal key={step.no} delay={index * 0.1} className={styles.stepWrap}>
+              <div className={styles.step}>
+                <span className={styles.stepNumber}>{step.no}</span>
+                <h3 className={styles.stepTitle}>{step.title}</h3>
+                <p className={styles.stepDescription}>{step.description}</p>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
-      {/* Video Tutorial Section */}
-      <section id="tutorials" className={styles.tutorials}>
-        <h2 className={styles.sectionTitle}>Watch How It Works</h2>
-        <div className={styles.videoContainer}>
-          <div className={styles.videoWrapper}>
-            <div
-              className={styles.videoComingSoon}
-              role="status"
-              aria-live="polite"
-            >
-              <h3>Video Coming Soon</h3>
-              <p>
-                We are preparing a new walkthrough focused on how SabiQuote
-                works and the key benefits for your business.
-              </p>
-            </div>
-          </div>
-          <p className={styles.videoCaption}>
-            A product-specific tutorial will be published soon
+      <section id="testimonials" className={styles.testimonials}>
+        <Reveal className={styles.sectionHead}>
+          <p className={styles.eyebrow}>Testimonials</p>
+          <h2 className={styles.sectionTitle}>The whole quote to cash flow, calmly</h2>
+        </Reveal>
+        <Reveal className={styles.quoteWrap}>
+          <blockquote className={styles.quote}>
+            The whole quote to cash flow, from one calm screen.
+          </blockquote>
+          <p className={styles.quoteAttribution}>
+            Daniel Okafor - Founder, Northwind Studio
           </p>
-        </div>
+        </Reveal>
       </section>
 
-      {/* FAQs */}
-      <section id="faqs" className={styles.faqs}>
-        <h2 className={styles.sectionTitle}>Frequently Asked Questions</h2>
+      <section id="faqs" className={`${styles.faqs} ${styles.sectionBand}`}>
+        <Reveal className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>Questions, answered</h2>
+        </Reveal>
         <div className={styles.faqList}>
           {faqs.map((faq, index) => (
-            <div
-              key={index}
-              className={`${styles.faqItem} ${activeFaq === index ? styles.faqActive : ""}`}
-            >
+            <Reveal key={faq.question} delay={index * 0.04} className={styles.faqItem}>
               <button
                 className={styles.faqQuestion}
                 onClick={() => setActiveFaq(activeFaq === index ? null : index)}
+                aria-expanded={activeFaq === index}
               >
                 <span className={styles.faqText}>{faq.question}</span>
                 {activeFaq === index ? (
-                  <ChevronUp size={20} className={styles.faqIcon} />
+                  <ChevronUp className={styles.faqIcon} size={20} />
                 ) : (
-                  <ChevronDown size={20} className={styles.faqIcon} />
+                  <ChevronDown className={styles.faqIcon} size={20} />
                 )}
               </button>
               {activeFaq === index && (
                 <div className={styles.faqAnswer}>{faq.answer}</div>
               )}
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
 
-      {/* CTA Section */}
       <section className={styles.cta}>
-        <h2 className={styles.ctaTitle}>Ready to Get Started?</h2>
-        <p className={styles.ctaText}>
-          Join thousands of users creating professional invoices today
-        </p>
-        <button className={styles.ctaButton} onClick={handleGetStarted}>
-          Create Your First Invoice Free
-        </button>
+        <Reveal className={styles.ctaInner}>
+          <h2 className={styles.ctaTitle}>Your first invoice is minutes away.</h2>
+          <p className={styles.ctaText}>
+            Start from a blank page and have a professional invoice in your hands today.
+          </p>
+          <button className={styles.btnPrimary} onClick={handleGetStarted}>
+            Create Invoice <ArrowRight size={18} />
+          </button>
+        </Reveal>
       </section>
 
-      {/* Footer */}
       <footer className={styles.footer}>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: "20px",
-            marginBottom: "12px",
-          }}
-        >
+        <div className={styles.footerLegal}>
           {[
             { slug: "terms", label: "Terms & Conditions" },
             { slug: "privacy", label: "Privacy Policy" },
             { slug: "kyc", label: "KYC Policy" },
             { slug: "commission", label: "Commission Policy" },
           ].map((l) => (
-            <button
-              key={l.slug}
-              onClick={() => onNavigate?.(l.slug)}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "inherit",
-                opacity: 0.85,
-                cursor: "pointer",
-                fontSize: "0.9rem",
-              }}
-            >
+            <button key={l.slug} className={styles.footerLink} onClick={() => onNavigate?.(l.slug)}>
               {l.label}
             </button>
           ))}
         </div>
-        <p>© 2026 sabiquot. Built for businesses everywhere.</p>
+        <p className={styles.footerCopy}>© 2026 sabiquot. Built for businesses everywhere.</p>
       </footer>
     </div>
   );

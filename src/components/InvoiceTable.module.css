@@ -1,6 +1,6 @@
 .container {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 20px;
   padding: 24px;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
@@ -13,7 +13,7 @@
 .title {
   font-size: 1.125rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #1a1a2e;
   margin: 0;
 }
 
@@ -31,9 +31,9 @@
   text-align: left;
   padding: 14px 16px;
   font-weight: 600;
-  color: #64748b;
-  background: #f8fafc;
-  border-bottom: 2px solid #e2e8f0;
+  color: #666;
+  background: #fbfbf8;
+  border-bottom: 1px solid #e5e5e5;
   font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -46,7 +46,7 @@
 
 .td {
   padding: 16px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f5f5f5;
   vertical-align: middle;
 }
 
@@ -57,7 +57,7 @@
 .input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 10px;
   font-size: 0.9375rem;
   font-family: inherit;
@@ -67,7 +67,7 @@
 
 .input:focus {
   outline: none;
-  border-color: #3b82f6;
+  border-color: #1a1a2e;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
@@ -77,7 +77,7 @@
 
 .total {
   font-weight: 600;
-  color: #0f172a;
+  color: #1a1a2e;
   font-size: 0.9375rem;
 }
 
@@ -114,9 +114,9 @@
   gap: 10px;
   width: 100%;
   padding: 14px 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  color: #0f172a;
-  border: 2px dashed #cbd5e1;
+  background: linear-gradient(135deg, #fbfbf8 0%, #f5f5f5 100%);
+  color: #1a1a2e;
+  border: 1px dashed #d1d1d1;
   border-radius: 12px;
   font-size: 0.9375rem;
   font-weight: 600;
@@ -125,8 +125,8 @@
 }
 
 .addButton:hover {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-  border-color: #94a3b8;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%);
+  border-color: #888;
   transform: translateY(-1px);
 }
 

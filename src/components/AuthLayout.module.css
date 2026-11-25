@@ -1,0 +1,54 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  background: #fafafa;
+}
+
+.left {
+  min-height: 100vh;
+  border-right: 1px solid #e5e5e5;
+}
+
+.right {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  background: #fafafa;
+}
+
+.rightInner {
+  width: 100%;
+  max-width: 520px;
+}
+
+.brandLink {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 28px;
+  text-decoration: none;
+}
+
+.brandLogo {
+  height: 28px;
+  width: auto;
+}
+
+@media (max-width: 1024px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .left {
+    min-height: 420px;
+    border-right: none;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .right {
+    min-height: auto;
+    padding: 40px 20px 56px;
+  }
+}

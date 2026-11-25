@@ -1,6 +1,6 @@
 .container {
   min-height: 100vh;
-  background: #f8fafc;
+  background: #fbfbf8;
   padding: 0;
 }
 
@@ -17,7 +17,7 @@
 .loader {
   width: 48px;
   height: 48px;
-  border: 4px solid #e2e8f0;
+  border: 4px solid #e5e5e5;
   border-top-color: var(--brand-yellow-ink);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -30,7 +30,7 @@
 /* Header */
 .header {
   background: #fff;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e5e5e5;
   padding: 20px 32px;
   display: flex;
   align-items: center;
@@ -45,20 +45,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #fbfbf8;
+  border: 1px solid #e5e5e5;
   border-radius: 10px;
   padding: 10px 16px;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #475569;
+  color: #555;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .backButton:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: #f5f5f5;
+  border-color: #d1d1d1;
 }
 
 .headerInfo {
@@ -74,7 +74,7 @@
 
 .subtitle {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #666;
   margin: 0;
 }
 
@@ -115,7 +115,7 @@
 /* Offer Summary */
 .offerSummary {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -126,7 +126,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f5f5f5;
 }
 
 .offerRow:last-child {
@@ -135,7 +135,7 @@
 
 .offerLabel {
   font-size: 0.9375rem;
-  color: #64748b;
+  color: #666;
   font-weight: 500;
 }
 
@@ -162,7 +162,7 @@
   gap: 12px;
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #e5e5e5;
 }
 
 .acceptButton {
@@ -196,7 +196,7 @@
   gap: 8px;
   background: #fff;
   color: #dc2626;
-  border: 2px solid #fecaca;
+  border: 1px solid #fecaca;
   border-radius: 10px;
   padding: 12px 20px;
   font-size: 0.9375rem;
@@ -258,7 +258,7 @@
 
 .sectionDesc {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #666;
   margin: -12px 0 20px 0;
   line-height: 1.5;
 }
@@ -266,7 +266,7 @@
 .collectiveSubmit {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 2px solid #e2e8f0;
+  border-top: 1px solid #e5e5e5;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -290,7 +290,7 @@
 
 .builderSection {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -299,7 +299,7 @@
 .builderContent {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #e5e5e5;
   animation: fadeIn 0.3s ease;
 }
 
@@ -335,8 +335,8 @@
 }
 
 .builderPreview {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #fbfbf8;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   padding: 20px;
 }
@@ -357,7 +357,7 @@
 .builderField label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -377,23 +377,23 @@
 .builderTable th {
   text-align: left;
   padding: 10px 12px;
-  background: #f1f5f9;
-  color: #475569;
+  background: #f5f5f5;
+  color: #555;
   font-weight: 600;
   font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 1px solid #e5e5e5;
 }
 
 .builderTable td {
   padding: 10px 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f5f5f5;
   color: #1A1A2E;
 }
 
 .builderTable tfoot td {
-  border-top: 2px solid #1A1A2E;
+  border-top: 1px solid #1A1A2E;
   border-bottom: none;
   font-size: 0.9375rem;
   padding: 12px;
@@ -402,7 +402,7 @@
 /* Messages Container */
 .messagesContainer {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -445,8 +445,8 @@
 
 .messageClient {
   align-self: flex-start;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #fbfbf8;
+  border: 1px solid #e5e5e5;
 }
 
 .messageHeader {
@@ -464,7 +464,7 @@
 
 .messageTime {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #888;
 }
 
 .messageText {
@@ -485,13 +485,13 @@
   display: flex;
   gap: 12px;
   padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #e5e5e5;
 }
 
 .messageInput {
   flex: 1;
   padding: 12px 16px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   font-size: 0.9375rem;
   font-family: inherit;
@@ -530,7 +530,7 @@
 /* Items Card */
 .itemsCard {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -547,8 +547,8 @@
 }
 
 .itemCard {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #fbfbf8;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
@@ -632,7 +632,7 @@
 
 .itemDetails {
   font-size: 0.875rem;
-  color: #64748b;
+  color: #666;
   margin-bottom: 12px;
 }
 
@@ -652,7 +652,7 @@
 .itemEditLabel {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -660,7 +660,7 @@
 .itemEditInput {
   width: 100%;
   padding: 10px 12px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
   font-size: 0.9375rem;
   font-weight: 600;
@@ -677,7 +677,7 @@
 .itemNoteSection {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #e5e5e5;
 }
 
 .itemNoteLabel {
@@ -686,14 +686,14 @@
   gap: 6px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #64748b;
+  color: #666;
   margin-bottom: 8px;
 }
 
 .itemNoteInput {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
   font-size: 0.875rem;
   font-family: inherit;
@@ -711,7 +711,7 @@
 /* Notes Card */
 .notesCard {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -720,7 +720,7 @@
 .generalNoteInput {
   width: 100%;
   padding: 14px 16px;
-  border: 2px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
   font-size: 0.9375rem;
   font-family: inherit;
@@ -762,7 +762,7 @@
 /* Timeline Card */
 .timelineCard {
   background: #fff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e5e5;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
@@ -785,7 +785,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: #d1d1d1;
   flex-shrink: 0;
   margin-top: 4px;
 }
@@ -807,7 +807,7 @@
 
 .timelineTime {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #888;
   margin: 0;
 }
 

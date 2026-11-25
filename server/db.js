@@ -49,12 +49,60 @@ function buildPoolConfig() {
 
 const pool = useSupabaseApi ? null : new Pool(buildPoolConfig());
 
+export { pool };
+
+export function hasDatabase() {
+  return Boolean(supabase || pool);
+}
+
 export function getPersistenceMode() {
   return useSupabaseApi ? "supabase-api" : "postgres";
 }
 
 export async function initDb() {
   if (useSupabaseApi) return;
+
+  // profiles: account records backing /api/auth and per-user invoice scoping.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS profiles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      company TEXT,
+      phone TEXT,
+      role TEXT NOT NULL DEFAULT 'public',
+      category TEXT NOT NULL DEFAULT 'public',
+      password_hash TEXT,
+      buildos_user_id TEXT,
+      buildos_supplier_id TEXT,
+      buildos_supplier_ref TEXT,
+      buildos_sync_status TEXT,
+      buildos_sync_error TEXT,
+      buildos_synced_at TIMESTAMPTZ,
+      settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+      reset_token_hash TEXT,
+      reset_token_expires_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE profiles
+      ADD COLUMN IF NOT EXISTS company TEXT,
+      ADD COLUMN IF NOT EXISTS phone TEXT,
+      ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'public',
+      ADD COLUMN IF NOT EXISTS password_hash TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_user_id TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_supplier_id TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_supplier_ref TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_sync_status TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_sync_error TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_synced_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS reset_token_hash TEXT,
+      ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -68,7 +116,10 @@ export async function initDb() {
       privacy_policy_accepted BOOLEAN NOT NULL DEFAULT FALSE,
       downloaded_at TIMESTAMPTZ,
       payload JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      profile_id UUID REFERENCES profiles(id),
+      status TEXT NOT NULL DEFAULT 'draft',
+      buildos_quote_id TEXT
     )
   `);
 }

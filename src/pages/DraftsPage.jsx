@@ -1,54 +1,27 @@
+import styles from "./DraftsPage.module.css";
+
 export default function DraftsPage({ profile }) {
   return (
-    <div style={s.page}>
-      <h1 style={s.pageTitle}>Drafts</h1>
-      <p style={s.subtitle}>Unsent invoices saved as drafts.</p>
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <p className={styles.kicker}>Invoices</p>
+        <h1 className={styles.title}>Drafts</h1>
+        <p className={styles.subtitle}>Invoices you’ve started but haven’t sent yet.</p>
+      </header>
 
       {!profile ? (
-        <div style={s.empty}>Sign in to save and view drafts.</div>
+        <div className={styles.empty}>
+          <div className={styles.emptyIcon}>🔐</div>
+          <h3 className={styles.emptyTitle}>Sign in to view drafts</h3>
+          <p className={styles.emptyText}>Sign in to save and manage your draft invoices.</p>
+        </div>
       ) : (
-        <div style={s.empty}>
-          <div style={s.emptyIcon}>📝</div>
-          <p style={{ fontWeight: 600, marginBottom: 6 }}>No drafts yet</p>
-          <p style={{ fontSize: 13 }}>
-            Draft saving is coming soon. For now, your invoices are saved
-            automatically after you download them.
-          </p>
+        <div className={styles.empty}>
+          <div className={styles.emptyIcon}>📝</div>
+          <h3 className={styles.emptyTitle}>No drafts yet</h3>
+          <p className={styles.emptyText}>When you save an invoice as a draft, it will appear here.</p>
         </div>
       )}
     </div>
   );
 }
-
-const s = {
-  page: {
-    maxWidth: 960,
-    margin: "0 auto",
-    padding: "32px 20px 60px",
-    fontFamily: "var(--font-body, system-ui, sans-serif)",
-  },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: "var(--color-accent, #0f172a)",
-    margin: "0 0 8px 0",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#64748b",
-    margin: "0 0 24px 0",
-  },
-  empty: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: 12,
-    padding: "48px 24px",
-    textAlign: "center",
-    color: "#64748b",
-    fontSize: 14,
-  },
-  emptyIcon: {
-    fontSize: 32,
-    marginBottom: 12,
-  },
-};

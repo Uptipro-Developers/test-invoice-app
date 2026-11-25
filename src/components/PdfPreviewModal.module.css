@@ -10,7 +10,7 @@
 }
 
 .modal {
-  background: #ffffff;
+  background: #fff;
   border-radius: 14px;
   width: min(880px, 96vw);
   height: min(92vh, 960px);
@@ -140,7 +140,7 @@
 .downloadBtn {
   padding: 10px 26px;
   background: #1e3563;
-  color: #ffffff;
+  color: #fff;
   border: none;
   border-radius: 8px;
   font-size: 0.875rem;

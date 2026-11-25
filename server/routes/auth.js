@@ -1,6 +1,8 @@
 import express from "express";
 import bcrypt from "bcryptjs";
-import { supabase } from "../db.js";
+import crypto from "crypto";
+import nodemailer from "nodemailer";
+import { supabase, pool } from "../db.js";
 import { buildosFetch, isBuildosConfigured } from "../buildosClient.js";
 
 const router = express.Router();
@@ -25,10 +27,10 @@ function dbUnavailable(res, error) {
   });
 }
 
-function requireSupabase(res) {
-  if (supabase) return true;
+function requireDb(res) {
+  if (supabase || pool) return true;
   console.error(
-    "Supabase client not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY",
+    "No database configured: set SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY or DATABASE_URL/PG*",
   );
   res.status(503).json({
     error: "The account service is not configured. Please contact support.",
@@ -66,8 +68,10 @@ function isSupplierProfile(profile) {
  * not block registration/login, it's recorded on the profile so it can be
  * retried or surfaced to an admin.
  */
-async function syncSupplierToBuildos(profile) {
-  if (!isBuildosConfigured() || !isSupplierProfile(profile) || profile.buildos_supplier_id) {
+export async function syncSupplierToBuildos(profile, { force = false } = {}) {
+  const hasRef = Boolean(String(profile?.buildos_supplier_ref || "").trim());
+  const eligible = force || isSupplierProfile(profile) || hasRef;
+  if (!isBuildosConfigured() || !eligible || profile.buildos_supplier_id) {
     return profile;
   }
 
@@ -80,39 +84,59 @@ async function syncSupplierToBuildos(profile) {
         email: profile.email,
         phone: profile.phone,
         contactPerson: profile.name,
-        // The vendor's existing Procurement supplier id, when they were given
-        // one. Lets an established vendor claim their existing supplier record
-        // instead of a duplicate being created alongside it.
         supplierId: profile.buildos_supplier_ref || undefined,
       },
     });
 
-    const { data: updated, error } = await supabase
-      .from("profiles")
-      .update({
-        buildos_supplier_id: supplier.id,
-        buildos_sync_status: "linked",
-        buildos_sync_error: null,
-        buildos_synced_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Failed to persist BuildOS supplier link:", error.message);
-      return profile;
+    if (supabase) {
+      const { data: updated, error } = await supabase
+        .from("profiles")
+        .update({
+          buildos_supplier_id: supplier.id,
+          buildos_sync_status: "linked",
+          buildos_sync_error: null,
+          buildos_synced_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id)
+        .select()
+        .single();
+      if (error) {
+        console.error("Failed to persist BuildOS supplier link:", error.message);
+        return profile;
+      }
+      return updated;
     }
-    return updated;
+
+    if (pool) {
+      const { rows } = await pool.query(
+        `UPDATE profiles
+         SET buildos_supplier_id = $1, buildos_sync_status = 'linked', buildos_sync_error = NULL, buildos_synced_at = NOW()
+         WHERE id = $2 RETURNING *`,
+        [supplier.id, profile.id],
+      );
+      return rows[0] || profile;
+    }
+    return profile;
   } catch (err) {
     console.error("BuildOS supplier sync failed:", err.message);
-    await supabase
-      .from("profiles")
-      .update({ buildos_sync_status: "failed", buildos_sync_error: err.message })
-      .eq("id", profile.id)
-      .then(null, (updateErr) =>
-        console.error("Failed to record BuildOS sync failure:", updateErr.message),
-      );
+    if (supabase) {
+      await supabase
+        .from("profiles")
+        .update({ buildos_sync_status: "failed", buildos_sync_error: err.message })
+        .eq("id", profile.id)
+        .then(null, (updateErr) =>
+          console.error("Failed to record BuildOS sync failure:", updateErr.message),
+        );
+    } else if (pool) {
+      await pool
+        .query(
+          `UPDATE profiles SET buildos_sync_status = 'failed', buildos_sync_error = $1 WHERE id = $2`,
+          [err.message, profile.id],
+        )
+        .catch((updateErr) =>
+          console.error("Failed to record BuildOS sync failure:", updateErr.message),
+        );
+    }
     return profile;
   }
 }
@@ -134,68 +158,93 @@ router.post("/register", async (req, res) => {
       .json({ error: "Password must be at least 8 characters" });
   }
 
-  if (!requireSupabase(res)) return;
+  if (!requireDb(res)) return;
 
   const normalizedEmail = String(email).trim();
 
   try {
-    // Check if email already exists
-    const { data: existing, error: lookupError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", normalizedEmail)
-      .maybeSingle();
+    if (supabase) {
+      const { data: existing, error: lookupError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
 
-    if (lookupError) {
-      if (isUpstreamFailure(lookupError)) return dbUnavailable(res, lookupError);
-      console.error("Registration lookup failed", lookupError);
-      return res.status(500).json({ error: lookupError.message });
-    }
+      if (lookupError) {
+        if (isUpstreamFailure(lookupError)) return dbUnavailable(res, lookupError);
+        console.error("Registration lookup failed", lookupError);
+        return res.status(500).json({ error: lookupError.message });
+      }
 
-    if (existing) {
-      return res
-        .status(409)
-        .json({ error: "An account with this email already exists" });
-    }
-
-    const password_hash = await bcrypt.hash(password, 12);
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert([
-        {
-          name,
-          email: normalizedEmail,
-          phone: phone || null,
-          role: role || (category === "vendor" ? "buyer" : "public"),
-          category: category || "public",
-          company: company || null,
-          // The vendor's existing Procurement supplier id, if they were given
-          // one. Kept on the profile so a later login re-attempts the link with
-          // it after a failed sync.
-          buildos_supplier_ref: String(buildosSupplierId || "").trim() || null,
-          password_hash,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      if (isUpstreamFailure(error)) return dbUnavailable(res, error);
-      // 23505 = unique violation (email registered between check and insert)
-      if (error.code === "23505") {
+      if (existing) {
         return res
           .status(409)
           .json({ error: "An account with this email already exists" });
       }
-      console.error("Registration insert failed", error);
-      return res.status(400).json({ error: error.message });
+
+      const password_hash = await bcrypt.hash(password, 12);
+      const { data, error } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            name,
+            email: normalizedEmail,
+            phone: phone || null,
+            role: role || (category === "vendor" ? "buyer" : "public"),
+            category: category || "public",
+            company: company || null,
+            buildos_supplier_ref: String(buildosSupplierId || "").trim() || null,
+            password_hash,
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        if (isUpstreamFailure(error)) return dbUnavailable(res, error);
+        if (error.code === "23505") {
+          return res.status(409).json({ error: "An account with this email already exists" });
+        }
+        console.error("Registration insert failed", error);
+        return res.status(400).json({ error: error.message });
+      }
+
+      const { password_hash: _ph, ...safe } = data;
+      const synced = await syncSupplierToBuildos(safe);
+      return res.status(201).json(synced);
     }
 
-    const { password_hash: _ph, ...safe } = data;
+    // pg fallback
+    const existingPg = await pool.query(
+      "SELECT id FROM profiles WHERE email = $1 LIMIT 1",
+      [normalizedEmail],
+    );
+    if (existingPg.rows[0]) {
+      return res.status(409).json({ error: "An account with this email already exists" });
+    }
+
+    const password_hash = await bcrypt.hash(password, 12);
+    const insertPg = await pool.query(
+      `INSERT INTO profiles (name, email, phone, role, category, company, buildos_supplier_ref, password_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [
+        name,
+        normalizedEmail,
+        phone || null,
+        role || (category === "vendor" ? "buyer" : "public"),
+        category || "public",
+        company || null,
+        String(buildosSupplierId || "").trim() || null,
+        password_hash,
+      ],
+    );
+    const { password_hash: _ph, ...safe } = insertPg.rows[0];
     const synced = await syncSupplierToBuildos(safe);
     return res.status(201).json(synced);
   } catch (error) {
+    if (error?.code === "23505") {
+      return res.status(409).json({ error: "An account with this email already exists" });
+    }
     return dbUnavailable(res, error);
   }
 });
@@ -208,24 +257,33 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ error: "email and password are required" });
   }
 
-  if (!requireSupabase(res)) return;
+  if (!requireDb(res)) return;
 
   try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("email", String(email).trim())
-      .maybeSingle();
+    const normalizedEmail = String(email).trim();
+    let data = null;
 
-    // An outage must not be reported as a wrong password.
-    if (error) return dbUnavailable(res, error);
+    if (supabase) {
+      const result = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("email", normalizedEmail)
+        .maybeSingle();
+      if (result.error) return dbUnavailable(res, result.error);
+      data = result.data;
+    } else {
+      const result = await pool.query(
+        "SELECT * FROM profiles WHERE email = $1 LIMIT 1",
+        [normalizedEmail],
+      );
+      data = result.rows[0] || null;
+    }
 
     if (!data) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
     if (!data.password_hash) {
-      // Legacy profile (no password) — allow login by email only for backward compat
       const { password_hash: _ph, ...safe } = data;
       const synced = await syncSupplierToBuildos(safe);
       return res.json(synced);
@@ -280,16 +338,24 @@ router.post("/buildos-link", async (req, res) => {
     }
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ buildos_user_id })
-    .eq("id", profile_id)
-    .select()
-    .single();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ buildos_user_id })
+      .eq("id", profile_id)
+      .select()
+      .single();
+    if (error) return res.status(400).json({ error: error.message });
+    const { password_hash: _ph, ...safe } = data;
+    return res.json(safe);
+  }
 
-  if (error) return res.status(400).json({ error: error.message });
-
-  const { password_hash: _ph, ...safe } = data;
+  const result = await pool.query(
+    "UPDATE profiles SET buildos_user_id = $1 WHERE id = $2 RETURNING *",
+    [buildos_user_id, profile_id],
+  );
+  if (!result.rows[0]) return res.status(404).json({ error: "Profile not found" });
+  const { password_hash: _ph, ...safe } = result.rows[0];
   return res.json(safe);
 });
 
@@ -317,19 +383,28 @@ router.post("/change-password", async (req, res) => {
       .json({ error: "New password must be at least 8 characters" });
   }
 
-  if (!requireSupabase(res)) return;
+  if (!requireDb(res)) return;
 
   try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, password_hash")
-      .eq("id", profileId)
-      .maybeSingle();
+    let data = null;
+    if (supabase) {
+      const result = await supabase
+        .from("profiles")
+        .select("id, password_hash")
+        .eq("id", profileId)
+        .maybeSingle();
+      if (result.error) return dbUnavailable(res, result.error);
+      data = result.data;
+    } else {
+      const result = await pool.query(
+        "SELECT id, password_hash FROM profiles WHERE id = $1 LIMIT 1",
+        [profileId],
+      );
+      data = result.rows[0] || null;
+    }
 
-    if (error) return dbUnavailable(res, error);
     if (!data) return res.status(404).json({ error: "Account not found" });
 
-    // A legacy profile with no password can set one without proving the old.
     if (data.password_hash) {
       const match = await bcrypt.compare(currentPassword, data.password_hash);
       if (!match) {
@@ -338,15 +413,186 @@ router.post("/change-password", async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(newPassword, 12);
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ password_hash })
-      .eq("id", profileId);
-
-    if (updateError) return dbUnavailable(res, updateError);
+    if (supabase) {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ password_hash })
+        .eq("id", profileId);
+      if (updateError) return dbUnavailable(res, updateError);
+    } else {
+      await pool.query("UPDATE profiles SET password_hash = $1 WHERE id = $2", [
+        password_hash,
+        profileId,
+      ]);
+    }
     return res.json({ changed: true });
   } catch (error) {
     return dbUnavailable(res, error);
+  }
+});
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function getMailer() {
+  if (!process.env.SMTP_HOST) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
+
+async function sendPasswordResetEmail(email, name, resetUrl) {
+  const mailer = getMailer();
+  if (!mailer) {
+    console.log(`[password-reset] SMTP not configured. Reset link for ${email}: ${resetUrl}`);
+    return;
+  }
+  await mailer.sendMail({
+    from: process.env.SMTP_FROM || "invoices@yourdomain.com",
+    to: email,
+    subject: "Reset your Sabiquot password",
+    text: `Hi ${name || "there"},\n\nWe received a request to reset your password. Use the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, you can ignore this email.\n`,
+  });
+}
+
+// POST /api/auth/forgot-password
+router.post("/forgot-password", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "Email is required" });
+  if (!requireDb(res)) return;
+
+  const generic = {
+    message: "If an account exists for that email, a password reset link has been sent.",
+  };
+
+  try {
+    let profile = null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, name")
+        .eq("email", email)
+        .maybeSingle();
+      if (error) {
+        if (isUpstreamFailure(error)) return dbUnavailable(res, error);
+        console.error("Forgot password lookup failed", error);
+        return res.status(500).json({ error: "Could not process request" });
+      }
+      profile = data;
+    } else {
+      const result = await pool.query(
+        "SELECT id, email, name FROM profiles WHERE email = $1 LIMIT 1",
+        [email],
+      );
+      profile = result.rows[0] || null;
+    }
+
+    if (!profile) return res.json(generic);
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = sha256(token);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    if (supabase) {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ reset_token_hash: tokenHash, reset_token_expires_at: expiresAt })
+        .eq("id", profile.id);
+      if (updateError) {
+        if (isUpstreamFailure(updateError)) return dbUnavailable(res, updateError);
+        console.error("Forgot password token save failed", updateError);
+        return res.status(500).json({ error: "Could not process request" });
+      }
+    } else {
+      await pool.query(
+        "UPDATE profiles SET reset_token_hash = $1, reset_token_expires_at = $2 WHERE id = $3",
+        [tokenHash, expiresAt, profile.id],
+      );
+    }
+
+    const appUrl = (process.env.APP_URL || "http://localhost:5173").replace(/\/$/, "");
+    const resetUrl = `${appUrl}/?view=reset-password&token=${encodeURIComponent(token)}`;
+    await sendPasswordResetEmail(profile.email, profile.name, resetUrl);
+
+    return res.json(generic);
+  } catch (err) {
+    if (isUpstreamFailure(err)) return dbUnavailable(res, err);
+    console.error("Forgot password failed", err);
+    return res.status(500).json({ error: "Could not process request" });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post("/reset-password", async (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  const newPassword = String(req.body?.newPassword || "");
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: "Token and new password are required" });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  }
+  if (!requireDb(res)) return;
+
+  try {
+    const tokenHash = sha256(token);
+    let profile = null;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, reset_token_expires_at")
+        .eq("reset_token_hash", tokenHash)
+        .maybeSingle();
+      if (error) {
+        if (isUpstreamFailure(error)) return dbUnavailable(res, error);
+        console.error("Reset password lookup failed", error);
+        return res.status(500).json({ error: "Could not reset password" });
+      }
+      profile = data;
+    } else {
+      const result = await pool.query(
+        "SELECT id, reset_token_expires_at FROM profiles WHERE reset_token_hash = $1 LIMIT 1",
+        [tokenHash],
+      );
+      profile = result.rows[0] || null;
+    }
+
+    if (!profile) {
+      return res.status(400).json({ error: "This reset link is invalid or has expired." });
+    }
+
+    const expiresAt = profile.reset_token_expires_at ? new Date(profile.reset_token_expires_at).getTime() : 0;
+    if (!expiresAt || Date.now() > expiresAt) {
+      return res.status(400).json({ error: "This reset link is invalid or has expired." });
+    }
+
+    const password_hash = await bcrypt.hash(newPassword, 12);
+    if (supabase) {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ password_hash, reset_token_hash: null, reset_token_expires_at: null })
+        .eq("id", profile.id);
+      if (updateError) {
+        if (isUpstreamFailure(updateError)) return dbUnavailable(res, updateError);
+        console.error("Reset password update failed", updateError);
+        return res.status(500).json({ error: "Could not reset password" });
+      }
+    } else {
+      await pool.query(
+        "UPDATE profiles SET password_hash = $1, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = $2",
+        [password_hash, profile.id],
+      );
+    }
+
+    return res.json({ message: "Password reset successfully. You can now sign in." });
+  } catch (err) {
+    if (isUpstreamFailure(err)) return dbUnavailable(res, err);
+    console.error("Reset password failed", err);
+    return res.status(500).json({ error: "Could not reset password" });
   }
 });
 

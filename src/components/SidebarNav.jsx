@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Home,
   FileText,
@@ -6,66 +7,9 @@ import {
   User,
   Settings,
   LogOut,
-  HelpCircle,
-  Sparkles,
-  Send,
-  Download,
-  Edit,
-  Trash2,
   Plus,
-  Check,
-  X,
-  ChevronRight,
-  ChevronLeft,
-  Pause,
-  Play,
-  MoreVertical,
-  Bell,
-  Search,
-  Filter,
-  Calendar,
-  DollarSign,
-  Building,
-  Mail,
-  Phone,
-  MapPin,
-  Globe,
-  CreditCard,
-  Clock,
-  AlertCircle,
-  Info,
-  CheckCircle,
-  XCircle,
   Menu,
-  ArrowLeft,
-  Upload,
-  Image,
-  PenTool,
-  Eye,
-  Save,
-  Share2,
-  Printer,
-  FileSpreadsheet,
-  MessageCircle,
-  ThumbsUp,
-  ThumbsDown,
-  RotateCcw,
-  Zap,
-  Star,
-  Heart,
-  Shield,
-  Lock,
-  Unlock,
-  Eye as EyeIcon,
-  EyeOff,
-  Moon,
-  Sun,
-  Monitor,
-  Smartphone,
-  Tablet,
-  CheckCircle2,
-  AlertTriangle,
-  XOctagon,
+  X,
 } from "lucide-react";
 import styles from "./SidebarNav.module.css";
 
@@ -76,22 +20,14 @@ export default function SidebarNav({
   profile,
   invoiceCount,
 }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   const navItems = [
     { id: "home", label: "Home", icon: Home, badge: null },
     { id: "main", label: "Create Invoice", icon: Plus, badge: null },
-    {
-      id: "invoices",
-      label: "My Invoices",
-      icon: FileText,
-      badge: invoiceCount,
-    },
+    { id: "invoices", label: "My Invoices", icon: FileText, badge: invoiceCount },
     { id: "requests", label: "Requests", icon: Inbox, badge: null },
-    {
-      id: "negotiations",
-      label: "Negotiations",
-      icon: MessageSquare,
-      badge: null,
-    },
+    { id: "negotiations", label: "Negotiations", icon: MessageSquare, badge: null },
   ];
 
   const bottomItems = [
@@ -99,87 +35,82 @@ export default function SidebarNav({
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
+  function nav(id) {
+    onNavigate(id);
+    setMobileOpen(false);
+  }
+
   return (
-    <aside className={styles.sidebar}>
-      {/* Logo */}
-      <div
-        className={styles.logo}
-        onClick={() => onNavigate("main")}
-        role="button"
-        tabIndex={0}
-      >
-        <img src="/logo-full.png" alt="sabiquot" className={styles.logoImage} />
+    <>
+      <div className={styles.mobileBar}>
+        <div className={styles.logo} onClick={() => nav("main")} role="button" tabIndex={0}>
+          <img src="/logo-full.png" alt="sabiquot" className={styles.logoImage} />
+        </div>
+        <button className={styles.mobileToggle} onClick={() => setMobileOpen((v) => !v)} aria-label={mobileOpen ? "Close menu" : "Open menu"}>
+          {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
       </div>
 
-      {/* Main Navigation */}
-      <nav className={styles.nav}>
-        <div className={styles.navSection}>
-          <span className={styles.navSectionLabel}>Main</span>
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={`${styles.navItem} ${currentPage === item.id ? styles.navItemActive : ""}`}
-              onClick={() => onNavigate(item.id)}
-            >
-              <item.icon className={styles.navIcon} />
-              <span className={styles.navLabel}>{item.label}</span>
-              {item.badge > 0 && (
-                <span className={styles.navBadge}>{item.badge}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      </nav>
+      {mobileOpen && <div className={styles.backdrop} onClick={() => setMobileOpen(false)} />}
 
-      {/* Help Section */}
-      <div className={styles.helpSection}>
-        <div className={styles.helpCard}>
-          <HelpCircle className={styles.helpIcon} />
-          <div className={styles.helpContent}>
-            <strong>Need Help?</strong>
-            <span>Guides & tutorials</span>
+      <aside className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ""}`}>
+        <div className={styles.desktopLogo}>
+          <div className={styles.logo} onClick={() => nav("main")} role="button" tabIndex={0}>
+            <img src="/logo-full.png" alt="sabiquot" className={styles.logoImage} />
           </div>
         </div>
-      </div>
 
-      {/* Bottom Navigation */}
-      <nav className={styles.bottomNav}>
-        <div className={styles.navSection}>
-          <span className={styles.navSectionLabel}>Account</span>
-          {bottomItems.map((item) => (
-            <button
-              key={item.id}
-              className={`${styles.navItem} ${currentPage === item.id ? styles.navItemActive : ""}`}
-              onClick={() => onNavigate(item.id)}
-            >
-              <item.icon className={styles.navIcon} />
-              <span className={styles.navLabel}>{item.label}</span>
-            </button>
-          ))}
+        <nav className={styles.nav}>
+          <div className={styles.navSection}>
+            <span className={styles.navSectionLabel}>Main</span>
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                className={`${styles.navItem} ${currentPage === item.id ? styles.navItemActive : ""}`}
+                onClick={() => nav(item.id)}
+              >
+                <item.icon className={styles.navIcon} />
+                <span className={styles.navLabel}>{item.label}</span>
+                {item.badge > 0 && <span className={styles.navBadge}>{item.badge}</span>}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div className={styles.sidebarNote}>
+          <p className={styles.sidebarNoteLabel}>Quick tip</p>
+          <p className={styles.sidebarNoteText}>Create an invoice, save it as draft, or send it when you&apos;re ready.</p>
         </div>
 
-        {/* Profile Info */}
-        {profile && (
-          <div className={styles.profileSection}>
-            <div className={styles.profileAvatar}>
-              {profile.name?.charAt(0).toUpperCase() || "U"}
-            </div>
-            <div className={styles.profileInfo}>
-              <span className={styles.profileName}>
-                {profile.name || profile.email}
-              </span>
-              <span className={styles.profileEmail}>{profile.email}</span>
-            </div>
-            <button
-              className={styles.logoutBtn}
-              onClick={onLogout}
-              title="Logout"
-            >
-              <LogOut className={styles.logoutIcon} />
-            </button>
+        <nav className={styles.bottomNav}>
+          <div className={styles.navSection}>
+            <span className={styles.navSectionLabel}>Account</span>
+            {bottomItems.map((item) => (
+              <button
+                key={item.id}
+                className={`${styles.navItem} ${currentPage === item.id ? styles.navItemActive : ""}`}
+                onClick={() => nav(item.id)}
+              >
+                <item.icon className={styles.navIcon} />
+                <span className={styles.navLabel}>{item.label}</span>
+              </button>
+            ))}
           </div>
-        )}
-      </nav>
-    </aside>
+
+          {profile && (
+            <div className={styles.profileSection}>
+              <div className={styles.profileAvatar}>{profile.name?.charAt(0).toUpperCase() || "U"}</div>
+              <div className={styles.profileInfo}>
+                <span className={styles.profileName}>{profile.name || profile.email}</span>
+                <span className={styles.profileEmail}>{profile.email}</span>
+              </div>
+              <button className={styles.logoutBtn} onClick={onLogout} title="Logout">
+                <LogOut className={styles.logoutIcon} />
+              </button>
+            </div>
+          )}
+        </nav>
+      </aside>
+    </>
   );
 }

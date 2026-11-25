@@ -1,62 +1,73 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, CheckCircle2, AlertCircle, Link2 } from "lucide-react";
 import { API_BASE_URL } from "../utils/apiClient";
+import styles from "./ProfilePage.module.css";
 
-/** Mirrors the account types offered during registration. */
-const CATEGORIES = [
-  { value: "public", label: "Public / Individual" },
-  { value: "vendor", label: "Vendor / Business" },
-];
-
-/** Vendor roles, matching onboarding. */
-const VENDOR_ROLES = [
-  { value: "buyer", label: "Procurement / Buyer" },
-  { value: "supplier", label: "Supplier" },
-  { value: "contractor", label: "Contractor" },
-];
-
-/**
- * Roles Procurement raises purchase orders against. Only these sync into
- * BuildOS as suppliers — a buyer is a procurement-side account, not somebody
- * being purchased from. Mirrors SUPPLYING_ROLES on the server.
- */
-const SUPPLYING_ROLES = new Set(["supplier", "contractor"]);
-
-/**
- * My Profile.
- *
- * This was a read-only list of five fields. Nothing could be edited, so a user
- * who registered as "public" could never become a vendor, a vendor could not
- * correct their role, and there was nowhere to enter the BuildOS vendor ID that
- * links an existing Procurement supplier to this account — which is why
- * established vendors kept being duplicated in the ERP instead of claimed.
- */
 export default function ProfilePage({ profile, onBack, onProfileChange }) {
-  const [form, setForm] = useState({
-    name: "",
-    phone: "",
-    company: "",
-    category: "public",
-    role: "public",
-    buildos_supplier_ref: "",
-  });
+  const [form, setForm] = useState({ name: "", phone: "", company: "", buildos_supplier_ref: "" });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
+  const [syncState, setSyncState] = useState("idle"); // idle | connecting | connected | error
+  const [syncMsg, setSyncMsg] = useState("");
+  const manualSyncRef = useRef(false);
 
   useEffect(() => {
     setForm({
       name: profile?.name ?? "",
       phone: profile?.phone ?? "",
       company: profile?.company ?? "",
-      category: profile?.category ?? "public",
-      role: profile?.role ?? "public",
       buildos_supplier_ref: profile?.buildos_supplier_ref ?? "",
     });
   }, [profile]);
 
   const set = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
-  const isVendor = form.category === "vendor";
-  const willSync = isVendor && SUPPLYING_ROLES.has(form.role);
+  useEffect(() => {
+    if (profile?.buildos_supplier_id || profile?.buildos_sync_status === "linked") {
+      setSyncState("connected");
+      setSyncMsg(profile?.buildos_supplier_id ? `Connected to BuildOS supplier ${profile.buildos_supplier_id}` : "Connected to BuildOS");
+    } else if (profile?.buildos_sync_status === "failed") {
+      setSyncState("error");
+      setSyncMsg(profile?.buildos_sync_error || "Connection failed");
+    } else if (!manualSyncRef.current) {
+      setSyncState("idle");
+      setSyncMsg("");
+    }
+  }, [profile?.buildos_supplier_id, profile?.buildos_sync_status, profile?.buildos_sync_error]);
+
+  async function handleBuildosSync() {
+    if (!profile?.id) return;
+    const ref = form.buildos_supplier_ref.trim();
+    if (!ref && !profile?.buildos_supplier_id) {
+      manualSyncRef.current = true;
+      setSyncState("error");
+      setSyncMsg("Enter a BuildOS Connection ID first.");
+      return;
+    }
+    manualSyncRef.current = true;
+    setSyncState("connecting");
+    setSyncMsg("Connecting to BuildOS...");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/profile/${profile.id}/buildos-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buildosSupplierRef: ref }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Could not connect to BuildOS.");
+      if (body.ok || body.status === "linked") {
+        setSyncState("connected");
+        setSyncMsg(body.buildosSupplierId ? `Connected to BuildOS supplier ${body.buildosSupplierId}` : "Connected to BuildOS");
+      } else {
+        setSyncState("error");
+        setSyncMsg(body.buildosSyncError || "Could not verify connection. Please check the ID and try again.");
+      }
+      if (body.profile) onProfileChange?.({ ...profile, ...body.profile });
+    } catch (err) {
+      setSyncState("error");
+      setSyncMsg(err.message || "Connection failed.");
+    }
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -64,11 +75,10 @@ export default function ProfilePage({ profile, onBack, onProfileChange }) {
     setSaving(true);
     setStatus(null);
     try {
-      // A public account has no vendor role; sending one would leave a stale
-      // role behind if the user switched back.
       const payload = {
-        ...form,
-        role: isVendor ? form.role : "public",
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        company: form.company.trim(),
         buildos_supplier_ref: form.buildos_supplier_ref.trim() || null,
       };
       const res = await fetch(`${API_BASE_URL}/api/profile/${profile.id}`, {
@@ -78,14 +88,8 @@ export default function ProfilePage({ profile, onBack, onProfileChange }) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Could not save your profile.");
-
       onProfileChange?.({ ...profile, ...body });
-      setStatus({
-        tone: "ok",
-        message: willSync
-          ? "Profile saved. Sign out and back in to sync with BuildOS Procurement."
-          : "Profile saved.",
-      });
+      setStatus({ tone: "ok", message: "Profile saved." });
     } catch (err) {
       setStatus({ tone: "error", message: err.message });
     } finally {
@@ -93,209 +97,82 @@ export default function ProfilePage({ profile, onBack, onProfileChange }) {
     }
   }
 
-  const syncState = profile?.buildos_supplier_id
-    ? `Linked to Procurement supplier ${profile.buildos_supplier_id}`
-    : profile?.buildos_sync_status === "failed"
-      ? `Last sync failed: ${profile.buildos_sync_error || "unknown error"}`
-      : "Not yet linked to Procurement";
+
 
   return (
-    <div style={s.page}>
-      <button onClick={onBack} style={s.backBtn}>
-        ← Back to Invoice Builder
-      </button>
+    <div className={styles.container}>
+      <button onClick={onBack} className={styles.backBtn}>← Back</button>
+      <header className={styles.header}>
+        <p className={styles.kicker}>Account</p>
+        <h1 className={styles.title}>My profile</h1>
+        <p className={styles.subtitle}>Manage your personal details and BuildOS connection.</p>
+      </header>
 
-      <form style={s.card} onSubmit={save}>
-        <h2 style={s.cardTitle}>My Profile</h2>
-
-        <div style={s.grid}>
-          <label style={s.field}>
-            <span style={s.fieldLabel}>Name</span>
-            <input style={s.input} value={form.name} onChange={set("name")} />
+      <form className={styles.card} onSubmit={save}>
+        <div className={styles.grid}>
+          <label className={styles.field}>
+            <span className={styles.label}>Name</span>
+            <input className={styles.input} value={form.name} onChange={set("name")} />
           </label>
-
-          <label style={s.field}>
-            <span style={s.fieldLabel}>Email</span>
-            {/* Read-only: the email identifies the account and is what a
-                password change and every notification is sent to. */}
-            <input
-              style={{ ...s.input, ...s.readOnly }}
-              value={profile?.email ?? ""}
-              readOnly
-            />
+          <label className={styles.field}>
+            <span className={styles.label}>Email</span>
+            <input className={`${styles.input} ${styles.readOnly}`} value={profile?.email ?? ""} readOnly />
           </label>
-
-          <label style={s.field}>
-            <span style={s.fieldLabel}>Phone</span>
-            <input style={s.input} value={form.phone} onChange={set("phone")} />
+          <label className={styles.field}>
+            <span className={styles.label}>Phone</span>
+            <input className={styles.input} value={form.phone} onChange={set("phone")} />
           </label>
-
-          <label style={s.field}>
-            <span style={s.fieldLabel}>Company</span>
-            <input
-              style={s.input}
-              value={form.company}
-              onChange={set("company")}
-            />
+          <label className={styles.field}>
+            <span className={styles.label}>Company name</span>
+            <input className={styles.input} value={form.company} onChange={set("company")} placeholder="Your company name" />
           </label>
-
-          <label style={s.field}>
-            <span style={s.fieldLabel}>Account type</span>
-            <select
-              style={s.input}
-              value={form.category}
-              onChange={set("category")}
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {isVendor && (
-            <label style={s.field}>
-              <span style={s.fieldLabel}>Vendor role</span>
-              <select style={s.input} value={form.role} onChange={set("role")}>
-                {VENDOR_ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </div>
 
-        {isVendor && (
-          <div style={s.syncBlock}>
-            <h3 style={s.subTitle}>BuildOS Procurement</h3>
-            <label style={s.field}>
-              <span style={s.fieldLabel}>BuildOS Vendor ID (optional)</span>
-              <input
-                style={s.input}
-                value={form.buildos_supplier_ref}
-                onChange={set("buildos_supplier_ref")}
-                placeholder="Paste the supplier ID Procurement gave you"
-                autoComplete="off"
-              />
-            </label>
-            <p style={s.hint}>
-              Already supply this company? Enter your vendor ID so your existing
-              supplier record is linked to this account instead of a duplicate
-              being created. Leave blank if you are new.
+        <hr className={styles.divider} />
+        <h2 className={styles.sectionTitle}>BuildOS connection</h2>
+        <div className={styles.grid}>
+          <label className={`${styles.field} ${styles.full}`}>
+            <span className={styles.label}>BuildOS Connection ID (optional)</span>
+            <div className={styles.connectRow}>
+              <input className={styles.input} value={form.buildos_supplier_ref} onChange={(e) => { manualSyncRef.current = false; setSyncState("idle"); setSyncMsg(""); set("buildos_supplier_ref")(e); }} placeholder="Paste your BuildOS connection ID" autoComplete="off" />
+              <button type="button" className={styles.connectBtn} onClick={handleBuildosSync} disabled={syncState === "connecting"}>
+                {syncState === "connecting" ? <><Loader2 size={16} className={styles.spin} /> Connecting</> : <><Link2 size={16} /> Connect</>}
+              </button>
+            </div>
+            <p className={styles.hint}>If your company name differs from BuildOS, the name you add here will be used and can be updated in BuildOS.</p>
+          </label>
+        </div>
+
+        <div className={`${styles.syncBox} ${syncState === "connected" ? styles.syncConnected : syncState === "error" ? styles.syncError : syncState === "connecting" ? styles.syncConnecting : ""}`}>
+          <div className={styles.syncIcon}>
+            {syncState === "connecting" && <Loader2 size={20} className={styles.spin} />}
+            {syncState === "connected" && <CheckCircle2 size={20} />}
+            {syncState === "error" && <AlertCircle size={20} />}
+            {syncState === "idle" && <Link2 size={20} />}
+          </div>
+          <div className={styles.syncBody}>
+            <p className={styles.syncTitle}>
+              {syncState === "connecting" ? "Connecting to BuildOS…" :
+               syncState === "connected" ? "Connected to BuildOS" :
+               syncState === "error" ? "Connection issue" :
+               "Not connected"}
             </p>
-            <p style={s.syncState}>{syncState}</p>
-            {!willSync && (
-              <p style={s.hint}>
-                Only Supplier and Contractor accounts sync into Procurement — a
-                Buyer is a procurement-side account.
-              </p>
+            <p className={styles.syncText}>
+              {syncMsg || "Enter your BuildOS Connection ID and click Connect."}
+            </p>
+            {syncState === "connected" && (
+              <div className={styles.syncMeta}>
+                {profile?.buildos_supplier_id && <span className={styles.syncPill}>Supplier ID: {profile.buildos_supplier_id}</span>}
+                {form.company?.trim() && <span className={styles.syncPill}>Company: {form.company.trim()}</span>}
+                {form.buildos_supplier_ref?.trim() && <span className={styles.syncPill}>Connection ID: {form.buildos_supplier_ref.trim()}</span>}
+              </div>
             )}
           </div>
-        )}
+        </div>
 
-        {status && (
-          <p
-            role="status"
-            style={{
-              ...s.status,
-              color: status.tone === "error" ? "#b91c1c" : "#15803d",
-            }}
-          >
-            {status.message}
-          </p>
-        )}
-
-        <button type="submit" style={s.saveBtn} disabled={saving}>
-          {saving ? "Saving…" : "Save changes"}
-        </button>
+        {status && <p className={styles.status} style={{ color: status.tone === "error" ? "#b91c1c" : "#166534" }}>{status.message}</p>}
+        <button type="submit" className={styles.saveBtn} disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
       </form>
     </div>
   );
 }
-
-const s = {
-  page: {
-    maxWidth: 920,
-    margin: "0 auto",
-    padding: "32px 20px 60px",
-    fontFamily: "var(--font-body, system-ui, sans-serif)",
-  },
-  backBtn: {
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    fontSize: 14,
-    color: "var(--color-accent, #0f172a)",
-    fontWeight: 600,
-    padding: "0 0 24px 0",
-    display: "block",
-  },
-  card: {
-    background: "#fff",
-    border: "1px solid var(--color-grey, #e2e8f0)",
-    borderRadius: 12,
-    padding: 24,
-    marginBottom: 24,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: 700,
-    margin: "0 0 18px 0",
-    color: "var(--color-accent, #0f172a)",
-  },
-  subTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    margin: "0 0 12px 0",
-    color: "var(--color-accent, #0f172a)",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-    gap: 16,
-  },
-  field: { display: "flex", flexDirection: "column", gap: 6 },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: "#64748b",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  input: {
-    padding: "9px 11px",
-    border: "1px solid #e2e8f0",
-    borderRadius: 8,
-    fontSize: 14,
-    fontFamily: "inherit",
-    background: "#fff",
-  },
-  readOnly: { background: "#f8fafc", color: "#64748b" },
-  syncBlock: {
-    marginTop: 24,
-    paddingTop: 20,
-    borderTop: "1px solid #e2e8f0",
-  },
-  hint: { fontSize: 12, color: "#64748b", margin: "8px 0 0", lineHeight: 1.5 },
-  syncState: {
-    fontSize: 12,
-    color: "#334155",
-    margin: "10px 0 0",
-    fontWeight: 600,
-  },
-  status: { fontSize: 13, fontWeight: 600, margin: "16px 0 0" },
-  saveBtn: {
-    marginTop: 20,
-    padding: "10px 20px",
-    border: "none",
-    borderRadius: 8,
-    background: "var(--color-accent, #1a1a2e)",
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-};

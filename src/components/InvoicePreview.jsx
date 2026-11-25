@@ -86,8 +86,8 @@ export default function InvoicePreview({
         <div className="note-section" style={{ marginBottom: "24px" }}>
           <p className="note-field" style={{ 
             padding: "20px", 
-            background: "#f8fafc", 
-            border: "1px solid #e2e8f0", 
+            background: "#fbfbf8", 
+            border: "1px solid #e5e5e5", 
             borderRadius: "12px",
             margin: 0
           }}>
@@ -100,7 +100,7 @@ export default function InvoicePreview({
         <div className="signature-section" style={{ 
           marginTop: "24px", 
           paddingTop: "24px", 
-          borderTop: "2px solid #e2e8f0",
+          borderTop: "1px solid #e5e5e5",
           background: "#eff6ff",
           padding: "24px",
           borderRadius: "12px"
@@ -108,7 +108,7 @@ export default function InvoicePreview({
           <p style={{ 
             fontSize: "0.875rem", 
             fontWeight: 600, 
-            color: "#64748b", 
+            color: "#666", 
             textTransform: "uppercase", 
             letterSpacing: "0.05em",
             marginBottom: "12px"
@@ -121,7 +121,7 @@ export default function InvoicePreview({
               width: "auto",
               height: "auto",
               display: "block",
-              border: "1px solid #e2e8f0",
+              border: "1px solid #e5e5e5",
               borderRadius: "8px",
               background: "#fff",
               boxShadow: "0 2px 8px rgba(0,0,0,0.05)"

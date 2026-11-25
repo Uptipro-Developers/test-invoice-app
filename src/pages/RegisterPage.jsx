@@ -1,26 +1,8 @@
 import React, { useState } from "react";
-import appLogo from "../assets/logo/logo-full.png";
+import { Eye, EyeOff, Loader2, CheckCircle2, AlertCircle, Link2 } from "lucide-react";
 import { postJson } from "../utils/apiClient";
+import AuthLayout from "../components/AuthLayout";
 import styles from "./RegisterPage.module.css";
-
-const ROLES = [
-  { value: "buyer", label: "Procurement / Buyer" },
-  { value: "supplier", label: "Supplier" },
-  { value: "contractor", label: "Contractor" },
-];
-
-const CATEGORIES = [
-  {
-    value: "public",
-    label: "General Public",
-    desc: "Create & download invoices freely",
-  },
-  {
-    value: "vendor",
-    label: "Vendor / Trade",
-    desc: "Negotiations, quotes & BuildOS integration",
-  },
-];
 
 export default function RegisterPage({ onRegister, onLogin }) {
   const [step, setStep] = useState(1);
@@ -30,14 +12,15 @@ export default function RegisterPage({ onRegister, onLogin }) {
     password: "",
     confirmPassword: "",
     phone: "",
-    category: "public",
-    role: "buyer",
     company: "",
-    buildosUserId: "",
     buildosSupplierId: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [connectStatus, setConnectStatus] = useState("idle"); // idle|connecting|connected|error
+  const [connectInfo, setConnectInfo] = useState(null);
 
   function set(field) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -68,52 +51,54 @@ export default function RegisterPage({ onRegister, onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    const hasBuildos = Boolean(form.buildosSupplierId.trim());
+    if (hasBuildos) setConnectStatus("connecting");
     try {
       const data = await postJson("/api/auth/register", {
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password,
         phone: form.phone.trim() || undefined,
-        category: form.category,
-        role: form.category === "vendor" ? form.role : "public",
+        category: "public",
+        role: "public",
         company: form.company.trim() || undefined,
-        // Lets an established vendor claim their existing Procurement
-        // supplier record instead of a duplicate being created.
         buildosSupplierId: form.buildosSupplierId.trim() || undefined,
       });
 
-      // Optional BuildOS account link — a failure here must not discard the
-      // account that was just created.
-      let profile = data;
-      if (form.buildosUserId.trim() && data.id) {
-        try {
-          // Use the linked profile the server returns so buildos_user_id is
-          // present immediately — otherwise it only appeared after a re-login.
-          const linked = await postJson("/api/auth/buildos-link", {
-            profile_id: data.id,
-            buildos_user_id: form.buildosUserId.trim(),
-          });
-          if (linked?.id) profile = linked;
-        } catch {
-          // Non-fatal: the profile exists and can be linked from Settings.
-        }
+      localStorage.setItem("profile", JSON.stringify(data));
+
+      if (hasBuildos) {
+        const linked = data.buildos_sync_status === "linked" || data.buildos_supplier_id;
+        setConnectStatus(linked ? "connected" : "error");
+        setConnectInfo({
+          supplierId: data.buildos_supplier_id || null,
+          company: data.company || form.company.trim(),
+          ref: form.buildosSupplierId.trim(),
+          error: data.buildos_sync_error || null,
+        });
+        setLoading(false);
+        setTimeout(() => onRegister(data), linked ? 1800 : 2200);
+        return;
       }
 
-      localStorage.setItem("profile", JSON.stringify(profile));
-      onRegister(profile);
+      onRegister(data);
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
+      setConnectStatus("idle");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className={styles.backdrop}>
+    <AuthLayout>
       <div className={styles.card}>
-        <div className={styles.logoWrap}>
-          <img src={appLogo} alt="sabiquot" className={styles.logo} />
-        </div>
+        <h1 className={styles.heading}>Sign Up</h1>
+        <p className={styles.subheading}>
+          {step === 1
+            ? "Create your account to get started"
+            : "Add your company details (optional)"}
+        </p>
 
         {/* Step indicator */}
         <div className={styles.stepRow}>
@@ -136,15 +121,6 @@ export default function RegisterPage({ onRegister, onLogin }) {
             </React.Fragment>
           ))}
         </div>
-
-        <h1 className={styles.heading}>
-          {step === 1 ? "Create your account" : "Your profile type"}
-        </h1>
-        <p className={styles.subheading}>
-          {step === 1
-            ? "Enter your details to get started"
-            : "Tell us how you'll use sabiquot"}
-        </p>
 
         {error && <div className={styles.errorBanner}>{error}</div>}
 
@@ -171,24 +147,44 @@ export default function RegisterPage({ onRegister, onLogin }) {
                 />
               </Field>
               <Field label="Password">
-                <input
-                  className={styles.input}
-                  type="password"
-                  value={form.password}
-                  onChange={set("password")}
-                  placeholder="Minimum 8 characters"
-                  autoComplete="new-password"
-                />
+                <div className={styles.passwordWrap}>
+                  <input
+                    className={styles.input}
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={set("password")}
+                    placeholder="Minimum 8 characters"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className={styles.eyeBtn}
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </Field>
               <Field label="Confirm password">
-                <input
-                  className={styles.input}
-                  type="password"
-                  value={form.confirmPassword}
-                  onChange={set("confirmPassword")}
-                  placeholder="Repeat password"
-                  autoComplete="new-password"
-                />
+                <div className={styles.passwordWrap}>
+                  <input
+                    className={styles.input}
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={form.confirmPassword}
+                    onChange={set("confirmPassword")}
+                    placeholder="Repeat password"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className={styles.eyeBtn}
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </Field>
               <Field label="Phone number (optional)" full>
                 <input
@@ -216,77 +212,59 @@ export default function RegisterPage({ onRegister, onLogin }) {
 
         {step === 2 && (
           <form onSubmit={handleSubmit} className={styles.form}>
-            <div className={styles.field}>
-              <label className={styles.label}>Account type</label>
-              <div className={styles.categoryRow}>
-                {CATEGORIES.map(({ value, label, desc }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() =>
-                      setForm((f) => ({ ...f, category: value }))
-                    }
-                    className={`${styles.categoryCard} ${
-                      form.category === value ? styles.categoryCardActive : ""
-                    }`}
-                  >
-                    <span className={styles.categoryLabel}>{label}</span>
-                    <span className={styles.categoryDesc}>{desc}</span>
-                  </button>
-                ))}
-              </div>
+            <div className={styles.grid}>
+              <Field label="BuildOS Connection ID (optional)" full>
+                <input
+                  className={styles.input}
+                  value={form.buildosSupplierId}
+                  onChange={set("buildosSupplierId")}
+                  placeholder="Paste your BuildOS connection ID"
+                  autoComplete="off"
+                />
+                <p className={styles.hint}>
+                  If you have a BuildOS connection ID, add it here to link your account.
+                </p>
+              </Field>
+              <Field label="Company name (optional)" full>
+                <input
+                  className={styles.input}
+                  value={form.company}
+                  onChange={set("company")}
+                  placeholder="Your company name"
+                  autoComplete="organization"
+                />
+                <p className={styles.hint}>
+                  You can add or update your company name now. If it differs from BuildOS, we&apos;ll use the name you provide here.
+                </p>
+              </Field>
             </div>
 
-            {form.category === "vendor" && (
-              <div className={styles.grid} style={{ marginTop: 20 }}>
-                <Field label="Role">
-                  <select
-                    className={styles.input}
-                    value={form.role}
-                    onChange={set("role")}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Company name (optional)">
-                  <input
-                    className={styles.input}
-                    value={form.company}
-                    onChange={set("company")}
-                    placeholder="Acme Ltd."
-                    autoComplete="organization"
-                  />
-                </Field>
-                <Field label="BuildOS Vendor ID (optional)" full>
-                  <input
-                    className={styles.input}
-                    value={form.buildosSupplierId}
-                    onChange={set("buildosSupplierId")}
-                    placeholder="Paste the supplier ID Procurement gave you"
-                    autoComplete="off"
-                  />
-                  <p className={styles.hint}>
-                    Already supply this company? Enter the vendor ID from
-                    Procurement so your existing supplier record is linked to this
-                    account instead of a duplicate being created. Leave blank if
-                    you are new.
+            {(connectStatus !== "idle" || (loading && form.buildosSupplierId.trim())) && (
+              <div className={`${styles.syncBox} ${connectStatus === "connected" ? styles.syncConnected : connectStatus === "error" ? styles.syncError : styles.syncConnecting}`}>
+                <div className={styles.syncIcon}>
+                  {(connectStatus === "connecting" || (loading && form.buildosSupplierId.trim() && connectStatus === "idle")) && <Loader2 size={20} className={styles.spin} />}
+                  {connectStatus === "connected" && <CheckCircle2 size={20} />}
+                  {connectStatus === "error" && <AlertCircle size={20} />}
+                </div>
+                <div className={styles.syncBody}>
+                  <p className={styles.syncTitle}>
+                    {connectStatus === "connected" ? "Connected to BuildOS" : connectStatus === "error" ? "Connection issue" : "Connecting to BuildOS…"}
                   </p>
-                </Field>
-                <Field label="BuildOS User ID (optional)" full>
-                  <input
-                    className={styles.input}
-                    value={form.buildosUserId}
-                    onChange={set("buildosUserId")}
-                    placeholder="Link your BuildOS account"
-                  />
-                  <p className={styles.hint}>
-                    Connect your BuildOS account to sync procurement activity
+                  <p className={styles.syncText}>
+                    {connectStatus === "connected"
+                      ? "Your account is linked and ready."
+                      : connectStatus === "error"
+                        ? (connectInfo?.error || "Account created, but BuildOS connection could not be verified. You can try again from Profile.")
+                        : "Verifying your BuildOS connection ID…"}
                   </p>
-                </Field>
+                  {connectStatus === "connected" && connectInfo && (
+                    <div className={styles.syncMeta}>
+                      {connectInfo.supplierId && <span className={styles.syncPill}>Supplier ID: {connectInfo.supplierId}</span>}
+                      {connectInfo.company && <span className={styles.syncPill}>Company: {connectInfo.company}</span>}
+                      {connectInfo.ref && <span className={styles.syncPill}>Connection ID: {connectInfo.ref}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -295,15 +273,16 @@ export default function RegisterPage({ onRegister, onLogin }) {
                 type="button"
                 onClick={() => setStep(1)}
                 className={styles.backBtn}
+                disabled={loading || connectStatus === "connected"}
               >
                 Back
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || connectStatus === "connected"}
                 className={styles.primaryBtn}
               >
-                {loading ? "Creating account…" : "Create account"}
+                {loading ? (form.buildosSupplierId.trim() ? "Creating & connecting…" : "Creating account…") : "Create account"}
               </button>
             </div>
           </form>
@@ -316,7 +295,7 @@ export default function RegisterPage({ onRegister, onLogin }) {
           </button>
         </p>
       </div>
-    </div>
+    </AuthLayout>
   );
 }
 

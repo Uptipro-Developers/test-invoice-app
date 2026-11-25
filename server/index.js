@@ -4,8 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { Resend } from "resend";
-import { getPersistenceMode, initDb, saveInvoice, getInvoices } from "./db.js";
-import { supabase } from "./db.js";
+import { getPersistenceMode, initDb, saveInvoice, getInvoices, supabase, pool } from "./db.js";
 import profileRoutes from "./routes/profiles.js";
 import notificationRoutes from "./routes/notifications.js";
 import negotiationRoutes from "./routes/negotiations.js";
@@ -185,17 +184,35 @@ app.get("/api/invoices/by-profile/:profileId", async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 20));
   const offset = (page - 1) * limit;
-  const { data, error, count } = await supabase
-    .from("invoices")
-    .select(
-      "id, invoice_number, client_email, sender_company_name, total, currency, status, created_at, payload",
-      { count: "exact" },
-    )
-    .eq("profile_id", profileId)
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json({ invoices: data, total: count, page, limit });
+  try {
+    if (supabase) {
+      const { data, error, count } = await supabase
+        .from("invoices")
+        .select(
+          "id, invoice_number, client_email, sender_company_name, total, currency, status, created_at, payload",
+          { count: "exact" },
+        )
+        .eq("profile_id", profileId)
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ invoices: data, total: count, page, limit });
+    }
+    if (pool) {
+      const countRes = await pool.query(`SELECT COUNT(*)::int AS count FROM invoices WHERE profile_id = $1`, [profileId]);
+      const total = countRes.rows[0]?.count || 0;
+      const { rows } = await pool.query(
+        `SELECT id, invoice_number, client_email, sender_company_name, total, currency, status, created_at, payload
+         FROM invoices WHERE profile_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        [profileId, limit, offset]
+      );
+      return res.json({ invoices: rows, total, page, limit });
+    }
+    return res.json({ invoices: [], total: 0, page, limit });
+  } catch (err) {
+    console.error("by-profile invoices failed", err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // ── GET /api/invoices/:id — fetch a single saved invoice by database ID ──────

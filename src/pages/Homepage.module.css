@@ -1,116 +1,295 @@
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 40px 32px 56px;
 }
 
-.welcomeSection {
-  text-align: center;
-  margin-bottom: 48px;
-}
-
-.welcomeTitle {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--color-accent, #0f172a);
-  margin: 0 0 12px 0;
-}
-
-.welcomeSubtitle {
-  font-size: 1.125rem;
-  color: #64748b;
-  margin: 0 0 32px 0;
-}
-
-.quickStats {
+.hero {
   display: flex;
-  justify-content: center;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 24px;
-  flex-wrap: wrap;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 24px;
+  margin-bottom: 24px;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #888;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(2rem, 3.6vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.nameAccent {
+  position: relative;
+  display: inline-block;
+}
+
+.nameAccent::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  bottom: 0.08em;
+  width: 104%;
+  height: 0.35em;
+  background: #fffa71;
+  z-index: -1;
+}
+
+.subtitle {
+  margin: 14px 0 0;
+  max-width: 560px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #666;
+}
+
+.primaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  background: #fffa71;
+  color: #1a1a2e;
+  border: none;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(255, 250, 113, 0.35);
+  transition: transform 0.2s, background 0.2s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.primaryBtn:hover {
+  background: #f7f56e;
+  transform: translateY(-1px);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
 }
 
 .statCard {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 16px;
+  padding: 24px;
   background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 20px 32px;
-  min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e5e5e5;
+  border-radius: 20px;
 }
 
-.statNumber {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--color-accent, #0f172a);
+.statIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #fffa71;
+  color: #1a1a2e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.statValue {
+  margin: 0;
+  font-size: 2rem;
   line-height: 1;
+  font-weight: 800;
+  color: #1a1a2e;
+  letter-spacing: -0.03em;
 }
 
 .statLabel {
-  font-size: 0.875rem;
-  color: #64748b;
-  margin-top: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #666;
+  font-weight: 600;
 }
 
-.quickActions {
-  margin-bottom: 48px;
+.section {
+  margin-bottom: 32px;
 }
 
-.quickActionsTitle {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-accent, #0f172a);
-  margin: 0 0 20px 0;
-  text-align: center;
+.sectionHead {
+  margin-bottom: 18px;
 }
 
-.actionButtons {
-  display: flex;
-  justify-content: center;
+.sectionTitle {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1a1a2e;
+}
+
+.sectionSub {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
-  flex-wrap: wrap;
 }
 
-.actionButton {
+.actionCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 28px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.actionCard:hover {
+  transform: translateY(-2px);
+  border-color: #1a1a2e;
+  box-shadow: 0 12px 30px rgba(26, 26, 46, 0.06);
+}
+
+.actionTop {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 24px;
-  background: #fff;
-  border: 2px solid #e2e8f0;
-  border-radius: 14px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--color-accent, #0f172a);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.actionButton:hover {
-  border-color: var(--color-accent, #0f172a);
-  background: var(--color-accent, #0f172a);
-  color: #fff;
-  transform: translateY(-2px);
+  justify-content: space-between;
+  margin-bottom: 24px;
 }
 
 .actionIcon {
-  font-size: 1.25rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #fbfbf8;
+  border: 1px solid #e5e5e5;
+  color: #1a1a2e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-@media (max-width: 640px) {
+.actionArrow {
+  color: #888;
+  transition: transform 0.2s, color 0.2s;
+}
+
+.actionCard:hover .actionArrow {
+  color: #1a1a2e;
+  transform: translateX(2px);
+}
+
+.actionTitle {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  letter-spacing: -0.01em;
+}
+
+.actionText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #666;
+}
+
+.tipBand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 32px;
+  background: #1a1a2e;
+  color: #fff;
+  border-radius: 24px;
+}
+
+.tipKicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 250, 113, 0.85);
+}
+
+.tipTitle {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+
+.tipText {
+  margin: 10px 0 0;
+  max-width: 600px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.secondaryBtn {
+  padding: 14px 24px;
+  background: #fffa71;
+  color: #1a1a2e;
+  border: none;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.secondaryBtn:hover {
+  background: #f7f56e;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1024px) {
+  .actionGrid, .statsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
   .container {
-    padding: 24px 16px;
+    padding: 24px 20px 40px;
   }
-
-  .welcomeTitle {
-    font-size: 1.875rem;
-  }
-
-  .actionButtons {
+  .hero, .tipBand {
     flex-direction: column;
+    align-items: flex-start;
+  }
+  .primaryBtn, .secondaryBtn {
+    width: 100%;
+    justify-content: center;
   }
 }

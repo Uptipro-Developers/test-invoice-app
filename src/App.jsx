@@ -25,6 +25,8 @@ import LandingPage from "./pages/LandingPage";
 import LegalPage from "./pages/LegalPage";
 import RequestsPage from "./pages/RequestsPage";
 import SettingsPage from "./pages/SettingsPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import { readSettings } from "./utils/settings";
 import NegotiationDetailsPage from "./pages/NegotiationDetailsPage";
 import Homepage from "./pages/Homepage";
@@ -66,6 +68,11 @@ function App() {
     const legal = params.get("legal");
     if (legal && ["terms", "privacy", "kyc", "commission"].includes(legal))
       return legal;
+    const view = params.get("view");
+    if (view === "forgot-password") return "forgot-password";
+    if (view === "reset-password") return "reset-password";
+    if (view === "login") return "login";
+    if (view === "register") return "register";
     if (params.get("id") || params.get("request_id") || params.get("rfq"))
       return "main";
     try {
@@ -73,7 +80,6 @@ function App() {
         localStorage.getItem("profile") || "null",
       );
       if (savedProfile) {
-        const view = params.get("view");
         if (view && APP_VIEWS.includes(view)) return view;
         return "main";
       }
@@ -81,6 +87,10 @@ function App() {
       // ignore parse errors
     }
     return "landing";
+  });
+  const [resetToken, setResetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("token") || "";
   });
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [receivedInvoiceId, setReceivedInvoiceId] = useState(null);
@@ -168,6 +178,15 @@ function App() {
       const params = new URLSearchParams(window.location.search);
       const idParam = params.get("id");
       const view = params.get("view");
+      if (view === "forgot-password" || view === "reset-password") {
+        setResetToken(params.get("token") || "");
+        setPage(view);
+        return;
+      }
+      if (view === "login" || view === "register") {
+        setPage(view);
+        return;
+      }
       if (view && APP_VIEWS.includes(view)) {
         setPage(view);
         return;
@@ -439,6 +458,33 @@ function App() {
           onLogin={handleLogin}
           onRegister={() => setPage("register")}
           onGuest={handleGuest}
+          onForgotPassword={() => {
+            window.history.pushState({}, "", "/?view=forgot-password");
+            setPage("forgot-password");
+          }}
+        />
+      );
+    }
+
+    if (page === "forgot-password") {
+      return (
+        <ForgotPasswordPage
+          onBack={() => {
+            window.history.pushState({}, "", "/?view=login");
+            setPage("login");
+          }}
+        />
+      );
+    }
+
+    if (page === "reset-password") {
+      return (
+        <ResetPasswordPage
+          token={resetToken}
+          onDone={() => {
+            window.history.pushState({}, "", "/?view=login");
+            setPage("login");
+          }}
         />
       );
     }
@@ -574,11 +620,24 @@ function App() {
             hideNavLinks={true}
           />
         )}
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: showHeader ? "100px 20px 0" : "40px 20px 0" }}>
+          <div style={{ marginBottom: 28 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#888" }}>
+              Invoice builder
+            </p>
+            <h1 style={{ margin: 0, fontSize: "clamp(2rem, 3vw, 3rem)", lineHeight: 1.1, letterSpacing: "-0.03em", fontWeight: 800, color: "#1a1a2e" }}>
+              Create an invoice
+            </h1>
+            <p style={{ margin: "10px 0 0", fontSize: 15, color: "#666", maxWidth: 560, lineHeight: 1.6 }}>
+              Fill in the details, add line items, and export a polished invoice in minutes.
+            </p>
+          </div>
+        </div>
         <div
           className="main-container"
           style={{
-            paddingTop: showHeader ? "100px" : "40px",
-            gap: "40px",
+            paddingTop: "0",
+            gap: "32px",
           }}
         >
           <div className="left-side" style={{ gap: "32px" }}>
@@ -694,7 +753,7 @@ function App() {
       <main
         className={showSidebarNav ? "app-main app-main--sidebar" : "app-main"}
         style={{
-          marginLeft: showSidebarNav ? "280px" : "0",
+          marginLeft: showSidebarNav ? "260px" : "0",
           transition: "margin-left 0.3s",
         }}
       >

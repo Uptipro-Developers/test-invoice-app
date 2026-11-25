@@ -304,7 +304,7 @@ const s = {
   sendBtn: {
     marginTop: 10,
     padding: "10px 24px",
-    background: "var(--color-accent, #0f172a)",
+    background: "var(--color-accent, #1a1a2e)",
     color: "#fff",
     border: "none",
     borderRadius: 8,
