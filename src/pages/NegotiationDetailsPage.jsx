@@ -11,13 +11,14 @@ import {
   FileText,
   Download,
 } from "lucide-react";
-import {
-  downloadInvoicePdf,
-  generateInvoicePdfDataUrl,
-} from "../utils/invoiceGenerator";
+import { downloadInvoicePdf } from "../utils/invoiceGenerator";
 import styles from "./NegotiationDetailsPage.module.css";
 
 import { API_BASE_URL } from "../utils/apiClient";
+import {
+  normalizeInvoiceItems,
+  resolveOfferItems,
+} from "../utils/negotiationPricing";
 
 function formatMoney(amount, currency = "NGN") {
   const n = Number(amount) || 0;
@@ -40,7 +41,6 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
   const [itemNotes, setItemNotes] = useState({});
   const [editableItems, setEditableItems] = useState([]);
   const [showBuilder, setShowBuilder] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const messagesEndRef = useRef(null);
 
@@ -60,7 +60,6 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
   // from BuildOS arrive here with a null sender_profile_id).
   const loadData = () => {
     if (!negotiationId) return;
-    setLoading(true);
     Promise.all([
       fetch(`${API_BASE_URL}/api/invoices/${negotiationId}`).then((r) =>
         r.ok ? r.json() : Promise.reject(r.status),
@@ -72,32 +71,42 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
       .then(([inv, rounds]) => {
         const roundList = Array.isArray(rounds) ? rounds : [];
         const payload = inv?.payload || {};
-        const items = (payload.items || []).map((it, idx) => {
-          const quantity = Number(it.quantity ?? it.qty) || 0;
-          const unitPrice =
-            Number(it.unitPrice ?? it.rate ?? it.unit_price) || 0;
-          const amount = Number(it.amount ?? it.total) || quantity * unitPrice;
-          return {
-            id: it.id ?? idx,
-            name: it.description || it.name || it.material || `Item ${idx + 1}`,
-            quantity,
-            unitPrice,
-            originalPrice: amount,
-          };
-        });
+        const originalItems = payload.originalItems || payload.items;
+        const items = normalizeInvoiceItems(originalItems).map((item) => ({
+          ...item,
+          name: item.description,
+          originalPrice: item.amount,
+        }));
         const lastRound = roundList[roundList.length - 1] || null;
+        const acceptedRound = [...roundList]
+          .reverse()
+          .find((round) => round.status === "accepted");
+        const itemOriginalAmount = items.reduce(
+          (sum, item) => sum + item.originalPrice,
+          0,
+        );
         const originalAmount =
-          Number(inv?.total) || items.reduce((s, i) => s + i.originalPrice, 0);
+          itemOriginalAmount || Number(inv?.total) || 0;
+        const currentOffer = Number(
+          acceptedRound?.proposed_total ?? lastRound?.proposed_total ?? inv?.total,
+        ) || originalAmount;
+        const resolvedStatus = acceptedRound ? "accepted" : inv?.status;
+        const effectiveRound = acceptedRound || lastRound;
+        const offerItems = resolveOfferItems(
+          items,
+          effectiveRound?.items,
+          currentOffer,
+        );
         setNegotiation({
           invoiceId: inv?.id,
           invoiceNumber: inv?.invoice_number || `#${negotiationId}`,
           createdAt: inv?.created_at,
           currency: inv?.currency || payload.currency || "NGN",
-          status: inv?.status,
+          status: resolvedStatus,
           originalAmount,
-          currentOffer: lastRound
-            ? Number(lastRound.proposed_total) || originalAmount
-            : originalAmount,
+          currentOffer,
+          agreedAmount:
+            resolvedStatus === "accepted" ? currentOffer : null,
           client: {
             name: payload.clientName || inv?.client_email || "Buyer",
             company: payload.clientCompanyName || "",
@@ -124,13 +133,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                   r.status !== "rejected",
               ) || null,
         });
-        setEditableItems(
-          items.map((item) => ({
-            ...item,
-            newUnitPrice: item.unitPrice,
-            newTotal: item.quantity * item.unitPrice,
-          })),
-        );
+        setEditableItems(offerItems);
         setMessages(
           roundList.map((r) => ({
             id: r.id,
@@ -142,9 +145,8 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
             created_at: r.created_at,
           })),
         );
-        setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -158,7 +160,12 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !negotiationId) return;
+    if (
+      !newMessage.trim() ||
+      !negotiationId ||
+      negotiation?.status === "accepted" ||
+      negotiation?.status === "finalized"
+    ) return;
     setSendingMessage(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/negotiate/`, {
@@ -169,6 +176,13 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
           sender_profile_id: profile?.id,
           proposed_total:
             negotiation?.currentOffer ?? negotiation?.originalAmount ?? 0,
+          items: editableItems.map((item) => ({
+            id: item.id,
+            description: item.name,
+            quantity: item.quantity,
+            unitPrice: item.newUnitPrice,
+            amount: item.newTotal,
+          })),
           message: newMessage.trim(),
         }),
       });
@@ -202,6 +216,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
   };
 
   const handleCollectiveCounter = async () => {
+    if (negotiation?.status === "accepted" || negotiation?.status === "finalized") return;
     const invalidItem = editableItems.find((i) => i.newUnitPrice <= 0);
     if (invalidItem) {
       alert(`Please enter a valid unit price for "${invalidItem.name}"`);
@@ -220,6 +235,14 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
           invoice_id: Number(negotiationId),
           sender_profile_id: profile?.id,
           proposed_total: totalNew,
+          items: editableItems.map((item) => ({
+            id: item.id,
+            description: item.name,
+            quantity: item.quantity,
+            unitPrice: item.newUnitPrice,
+            amount: item.newTotal,
+            note: itemNotes[item.id] || "",
+          })),
           message: "Collective counter offer",
         }),
       });
@@ -241,6 +264,10 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
         { method: "PATCH" },
       );
       if (!res.ok) throw new Error();
+      const result = await res.json();
+      if (result?.buildosSync?.synced === false) {
+        alert(`Offer accepted locally, but BuildOS sync is pending: ${result.buildosSync.error}`);
+      }
       loadData();
     } catch {
       alert("Could not accept the offer. Please try again.");
@@ -257,6 +284,10 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
         { method: "PATCH" },
       );
       if (!res.ok) throw new Error();
+      const result = await res.json();
+      if (result?.buildosSync?.synced === false) {
+        alert(`Offer rejected locally, but BuildOS sync is pending: ${result.buildosSync.error}`);
+      }
       loadData();
     } catch {
       alert("Could not reject the offer. Please try again.");
@@ -264,7 +295,10 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
   };
 
   const calculateTotal = () => {
-    return editableItems.reduce((sum, item) => sum + item.newTotal, 0);
+    return editableItems.reduce(
+      (sum, item) => sum + (Number(item.newTotal) || 0),
+      0,
+    );
   };
 
   if (!negotiation) {
@@ -309,6 +343,9 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
     downloadInvoicePdf("template-1", pdfData);
   };
 
+  const negotiationComplete =
+    negotiation.status === "accepted" || negotiation.status === "finalized";
+
   return (
     <div className={styles.container}>
       {/* Header */}
@@ -331,9 +368,19 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
               : ""}
           </p>
         </div>
-        <div className={styles.statusBadge}>
-          <Clock size={16} />
-          Negotiating
+        <div className={`${styles.statusBadge} ${negotiationComplete ? styles.statusAccepted : ""}`}>
+          {negotiation.status === "accepted" ? (
+            <CheckCircle2 size={16} />
+          ) : negotiation.status === "rejected" ? (
+            <XCircle size={16} />
+          ) : (
+            <Clock size={16} />
+          )}
+          {negotiationComplete
+            ? "Agreed"
+            : negotiation.status === "rejected"
+              ? "Rejected"
+              : "Negotiating"}
         </div>
       </div>
 
@@ -406,18 +453,22 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
               </span>
             </div>
             <div className={styles.offerRow}>
-              <span className={styles.offerLabel}>Client Offer:</span>
+              <span className={styles.offerLabel}>
+                {negotiation.status === "accepted"
+                  ? "Agreed Amount:"
+                  : "Latest Offer:"}
+              </span>
               <span className={styles.offerValueHighlight}>
                 {money(negotiation.currentOffer)}
               </span>
             </div>
-            <div className={styles.offerRow}>
+            {negotiation.status !== "accepted" && <div className={styles.offerRow}>
               <span className={styles.offerLabel}>Your Counter:</span>
               <span className={styles.offerValueHighlight}>
                 {money(calculateTotal())}
               </span>
-            </div>
-            <div className={styles.offerRow}>
+            </div>}
+            {negotiation.status !== "accepted" && <div className={styles.offerRow}>
               <span className={styles.offerLabel}>
                 Difference from Original:
               </span>
@@ -428,9 +479,9 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                     Math.min(negotiation.currentOffer, calculateTotal()),
                 )}
               </span>
-            </div>
+            </div>}
 
-            <div className={styles.actionButtons}>
+            {negotiation.status !== "accepted" && <div className={styles.actionButtons}>
               <button
                 className={styles.acceptButton}
                 onClick={handleAcceptOffer}
@@ -447,19 +498,26 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                 <XCircle size={18} />
                 Reject
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* Invoice Items - Editable */}
           <div className={styles.itemsCard}>
             <h3 className={styles.cardTitle}>
-              <Edit2 size={20} />
-              Negotiate Items
+              {negotiationComplete ? <CheckCircle2 size={20} /> : <Edit2 size={20} />}
+              {negotiationComplete ? "Agreed Items" : "Negotiate Items"}
             </h3>
             <p className={styles.sectionDesc}>
-              Adjust quantities and unit prices below, then submit your
-              collective counter offer.
+              {negotiationComplete
+                ? "Negotiation completed successfully. These are the final agreed quantities and unit prices."
+                : "Adjust quantities and unit prices below, then submit your collective counter offer."}
             </p>
+            {negotiationComplete && (
+              <div className={styles.completedNotice}>
+                <CheckCircle2 size={18} />
+                Agreement completed at {money(negotiation.agreedAmount || negotiation.currentOffer)}. Pricing is now locked.
+              </div>
+            )}
             {editableItems.map((item) => (
               <div key={item.id} className={styles.itemCard}>
                 <div className={styles.itemHeader}>
@@ -488,6 +546,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                         )
                       }
                       min="1"
+                      disabled={negotiationComplete}
                     />
                   </div>
                   <div className={styles.itemEditField}>
@@ -507,6 +566,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                       }
                       min="0"
                       step="100"
+                      disabled={negotiationComplete}
                     />
                   </div>
                 </div>
@@ -531,13 +591,14 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                     }
                     placeholder="Add notes about this item..."
                     rows={2}
+                    disabled={negotiationComplete}
                   />
                 </div>
               </div>
             ))}
 
             {/* Collective Submit Button */}
-            <div className={styles.collectiveSubmit}>
+            {!negotiationComplete && <div className={styles.collectiveSubmit}>
               <div className={styles.collectiveTotal}>
                 <span>Collective Counter Total:</span>
                 <strong>{money(calculateTotal())}</strong>
@@ -549,7 +610,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                 <Send size={18} />
                 Submit Collective Counter Offer
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* Inline Negotiation Builder */}
@@ -561,7 +622,9 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
               <Eye size={18} />
               {showBuilder
                 ? "Hide Negotiation Invoice"
-                : "Preview & Edit in Invoice Builder"}
+                : negotiationComplete
+                  ? "Preview Agreed Invoice"
+                  : "Preview Negotiation Invoice"}
             </button>
 
             {showBuilder && (
@@ -678,7 +741,7 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className={styles.messageInputContainer}>
+            {!negotiationComplete ? <div className={styles.messageInputContainer}>
               <textarea
                 className={styles.messageInput}
                 placeholder="Type your message..."
@@ -694,7 +757,11 @@ export default function NegotiationDetailsPage({ profile, onNavigate }) {
                 <Send size={18} />
                 {sendingMessage ? "Sending…" : "Send"}
               </button>
-            </div>
+            </div> : (
+              <div className={styles.conversationClosed}>
+                <CheckCircle2 size={16} /> Negotiation completed. This conversation is read-only.
+              </div>
+            )}
           </div>
 
           {/* Negotiation History Timeline */}

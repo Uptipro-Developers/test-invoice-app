@@ -1,7 +1,11 @@
 import express from "express";
 import { createHmac, timingSafeEqual } from "crypto";
-import { supabase } from "../db.js";
+import { supabase, pool } from "../db.js";
 import { notifyProfiles } from "../notify.js";
+import {
+  applyAgreedPricing,
+  resolveNegotiatedItems,
+} from "../negotiationPricing.js";
 
 const router = express.Router();
 
@@ -98,39 +102,107 @@ async function resolveProfileId(data) {
 
   // Primary: match by the stable BuildOS supplier id bridge column.
   for (const supplierId of ids) {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("buildos_supplier_id", supplierId)
-      .maybeSingle();
-
-    if (error) {
+    try {
+      if (supabase) {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("buildos_supplier_id", supplierId)
+          .maybeSingle();
+        if (error) throw error;
+        if (profile?.id) return profile.id;
+      } else if (pool) {
+        const { rows } = await pool.query(
+          `SELECT id FROM profiles WHERE buildos_supplier_id = $1 LIMIT 1`,
+          [supplierId],
+        );
+        if (rows[0]?.id) return rows[0].id;
+      }
+    } catch (error) {
       console.error("Supplier → profile lookup (by id) failed:", error.message);
-    } else if (profile?.id) {
-      return profile.id;
     }
   }
 
   // Fallback: match by supplier email, case-insensitively so a difference in
   // casing between the ERP record and the portal profile does not orphan it.
   for (const email of emails) {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("email", email)
-      .maybeSingle();
-
-    if (error) {
+    try {
+      if (supabase) {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("email", email)
+          .maybeSingle();
+        if (error) throw error;
+        if (profile?.id) return profile.id;
+      } else if (pool) {
+        const { rows } = await pool.query(
+          `SELECT id FROM profiles WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [email],
+        );
+        if (rows[0]?.id) return rows[0].id;
+      }
+    } catch (error) {
       console.error("Supplier → profile lookup (by email) failed:", error.message);
-    } else if (profile?.id) {
-      return profile.id;
     }
   }
 
   return null;
 }
 
-const HANDLED_EVENTS = new Set(["purchase-request.created", "rfq.sent", "purchase-order.created", "quote.negotiated"]);
+const HANDLED_EVENTS = new Set([
+  "purchase-request.created",
+  "rfq.sent",
+  "purchase-order.created",
+  "quote.negotiated",
+  "quote.agreed",
+]);
+
+async function findInvoiceByBuildosQuoteId(quoteId) {
+  if (supabase) {
+    const result = await supabase
+      .from("invoices")
+      .select("id, profile_id, invoice_number, total, payload")
+      .eq("buildos_quote_id", String(quoteId))
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+  if (pool) {
+    const result = await pool.query(
+      `SELECT id, profile_id, invoice_number, total, payload FROM invoices
+       WHERE buildos_quote_id = $1 ORDER BY id DESC LIMIT 1`,
+      [String(quoteId)],
+    );
+    return result.rows[0] || null;
+  }
+  return null;
+}
+
+async function findLatestNegotiation(invoiceId) {
+  if (supabase) {
+    const result = await supabase
+      .from("negotiations")
+      .select("id, items")
+      .eq("invoice_id", invoiceId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+  if (pool) {
+    const result = await pool.query(
+      `SELECT id, items FROM negotiations
+       WHERE invoice_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [invoiceId],
+    );
+    return result.rows[0] || null;
+  }
+  return null;
+}
 
 /**
  * Surface a buyer counter-offer (raised in BuildOS) on the supplier's portal.
@@ -143,15 +215,10 @@ const HANDLED_EVENTS = new Set(["purchase-request.created", "rfq.sent", "purchas
  * BuildOS does not retry to exhaustion.
  */
 async function handleQuoteNegotiated(data, res) {
-  const { data: invoice, error } = await supabase
-    .from("invoices")
-    .select("id, profile_id, invoice_number")
-    .eq("buildos_quote_id", String(data.id))
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
+  let invoice = null;
+  try {
+    invoice = await findInvoiceByBuildosQuoteId(data.id);
+  } catch (error) {
     console.error(`quote.negotiated ${data.id} lookup failed:`, error.message);
     return res.status(500).json({ error: error.message });
   }
@@ -159,15 +226,42 @@ async function handleQuoteNegotiated(data, res) {
     return res.json({ received: true, event: "quote.negotiated", ignored: true, reason: "no linked invoice" });
   }
 
-  await supabase.from("invoices").update({ status: "negotiating" }).eq("id", invoice.id);
-  await supabase.from("negotiations").insert([
-    {
+  const proposedTotal = Number(data.proposedAmount) || 0;
+  const message = data.comment || `Buyer counter-offer (round ${data.round ?? 1})`;
+  const items = resolveNegotiatedItems(
+    invoice.payload?.items,
+    data.items,
+    proposedTotal,
+  );
+  if (supabase) {
+    const invoiceUpdate = await supabase.from("invoices").update({ status: "negotiating" }).eq("id", invoice.id);
+    if (invoiceUpdate.error) return res.status(500).json({ error: invoiceUpdate.error.message });
+    const negotiationInsert = await supabase.from("negotiations").insert([{
       invoice_id: invoice.id,
       sender_profile_id: null,
-      proposed_total: Number(data.proposedAmount) || 0,
-      message: data.comment || `Buyer counter-offer (round ${data.round ?? 1})`,
-    },
-  ]);
+      proposed_total: proposedTotal,
+      items,
+      message,
+    }]);
+    if (negotiationInsert.error) return res.status(500).json({ error: negotiationInsert.error.message });
+  } else if (pool) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`UPDATE invoices SET status = 'negotiating' WHERE id = $1`, [invoice.id]);
+      await client.query(
+        `INSERT INTO negotiations (invoice_id, sender_profile_id, proposed_total, items, message)
+         VALUES ($1, NULL, $2, $3, $4)`,
+        [invoice.id, proposedTotal, JSON.stringify(items), message],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return res.status(500).json({ error: error.message });
+    } finally {
+      client.release();
+    }
+  }
 
   res.json({ received: true, event: "quote.negotiated", invoiceId: invoice.id });
 
@@ -177,6 +271,98 @@ async function handleQuoteNegotiated(data, res) {
       invoice.id,
       "counter_offer",
       `Buyer countered your quote on invoice ${invoice.invoice_number}`,
+    ).catch((err) => console.error("Failed to notify supplier:", err.message));
+  }
+}
+
+/** Final buyer award: close the local negotiation at BuildOS's agreed total. */
+async function handleQuoteAgreed(data, res) {
+  let invoice;
+  try {
+    invoice = await findInvoiceByBuildosQuoteId(data.id);
+  } catch (error) {
+    console.error(`quote.agreed ${data.id} lookup failed:`, error.message);
+    return res.status(500).json({ error: error.message });
+  }
+  if (!invoice) {
+    return res.json({
+      received: true,
+      event: "quote.agreed",
+      ignored: true,
+      reason: "no linked invoice",
+    });
+  }
+
+  const agreedTotal = Number(data.agreedAmount);
+  if (!Number.isFinite(agreedTotal) || agreedTotal < 0) {
+    return res.status(400).json({ error: "data.agreedAmount must be a valid amount" });
+  }
+
+  try {
+    const latestRound = await findLatestNegotiation(invoice.id);
+    const payload = applyAgreedPricing(
+      invoice,
+      data.items || latestRound?.items,
+      agreedTotal,
+    );
+    if (supabase) {
+      const invoiceUpdate = await supabase
+        .from("invoices")
+        .update({ status: "accepted", total: agreedTotal, payload })
+        .eq("id", invoice.id);
+      if (invoiceUpdate.error) throw invoiceUpdate.error;
+
+      if (latestRound?.id) {
+        const roundUpdate = await supabase
+          .from("negotiations")
+          .update({
+            status: "accepted",
+            proposed_total: agreedTotal,
+            items: payload.items,
+          })
+          .eq("id", latestRound.id);
+        if (roundUpdate.error) throw roundUpdate.error;
+      }
+    } else if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `UPDATE invoices SET status = 'accepted', total = $1, payload = $2 WHERE id = $3`,
+          [agreedTotal, JSON.stringify(payload), invoice.id],
+        );
+        await client.query(
+          `UPDATE negotiations
+           SET status = 'accepted', proposed_total = $1, items = $2
+           WHERE id = $3`,
+          [agreedTotal, JSON.stringify(payload.items), latestRound?.id || null],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({
+    received: true,
+    event: "quote.agreed",
+    invoiceId: invoice.id,
+    status: "accepted",
+    agreedTotal,
+  });
+
+  if (invoice.profile_id) {
+    notifyProfiles(
+      [invoice.profile_id],
+      invoice.id,
+      "offer_accepted",
+      `Your quote for invoice ${invoice.invoice_number} was agreed at ${agreedTotal}.`,
     ).catch((err) => console.error("Failed to notify supplier:", err.message));
   }
 }
@@ -209,11 +395,40 @@ function missingColumnName(error) {
 
 /** One upsert attempt, keyed on the BuildOS id for idempotency. */
 function storeRequest(row) {
-  return supabase
-    .from("requests")
-    .upsert([row], { onConflict: "buildos_ref" })
-    .select("id")
-    .single();
+  if (supabase) {
+    return supabase
+      .from("requests")
+      .upsert([row], { onConflict: "buildos_ref" })
+      .select("id")
+      .single();
+  }
+  return pool
+    .query(
+      `INSERT INTO requests
+        (profile_id, title, amount, currency, status, materials, buildos_ref, buildos_event)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+       ON CONFLICT (buildos_ref) DO UPDATE SET
+         profile_id = EXCLUDED.profile_id,
+         title = EXCLUDED.title,
+         amount = EXCLUDED.amount,
+         currency = EXCLUDED.currency,
+         status = EXCLUDED.status,
+         materials = EXCLUDED.materials,
+         buildos_event = EXCLUDED.buildos_event
+       RETURNING id`,
+      [
+        row.profile_id,
+        row.title,
+        row.amount ?? null,
+        row.currency || "NGN",
+        row.status,
+        JSON.stringify(row.materials || []),
+        row.buildos_ref,
+        row.buildos_event,
+      ],
+    )
+    .then((result) => ({ data: result.rows[0], error: null }))
+    .catch((error) => ({ data: null, error }));
 }
 
 // POST /api/buildos-webhook — receives events from BuildOS ERP
@@ -245,6 +460,9 @@ router.post("/", async (req, res) => {
   // which links to the portal invoice through invoices.buildos_quote_id.
   if (event === "quote.negotiated") {
     return handleQuoteNegotiated(data, res);
+  }
+  if (event === "quote.agreed") {
+    return handleQuoteAgreed(data, res);
   }
 
   const profileId = await resolveProfileId(data);

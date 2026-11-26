@@ -32,6 +32,7 @@ import NegotiationDetailsPage from "./pages/NegotiationDetailsPage";
 import Homepage from "./pages/Homepage";
 
 import { API_BASE_URL } from "./utils/apiClient";
+import { normalizeInvoiceItems } from "./utils/negotiationPricing";
 
 // Top-level pages that are reflected in the URL as ?view=<page> so a refresh
 // or browser back/forward keeps the user on the same screen.
@@ -227,7 +228,7 @@ function App() {
             tax: p.taxRate != null ? p.taxRate : prev.tax,
             industry: p.industry || prev.industry,
           }));
-          if (Array.isArray(p.items)) setItems(p.items);
+          if (Array.isArray(p.items)) setItems(normalizeInvoiceItems(p.items));
           if (p.signature) setSignature(p.signature);
           setPage("main");
         })

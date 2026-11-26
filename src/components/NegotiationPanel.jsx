@@ -58,7 +58,9 @@ export default function NegotiationPanel({ invoiceId, profileId, isOwner }) {
   }
 
   async function respond(id, action) {
-    await fetch(`${API}/api/negotiate/${id}/${action}`, { method: "PATCH" });
+    const res = await fetch(`${API}/api/negotiate/${id}/${action}`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Could not update the offer.");
+    const result = await res.json();
     setThreads((prev) =>
       prev.map((t) =>
         t.id === id
@@ -66,6 +68,9 @@ export default function NegotiationPanel({ invoiceId, profileId, isOwner }) {
           : t,
       ),
     );
+    if (result?.buildosSync?.synced === false) {
+      alert(`Saved locally, but BuildOS sync is pending: ${result.buildosSync.error}`);
+    }
   }
 
   if (!invoiceId) return null;

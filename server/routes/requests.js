@@ -111,6 +111,16 @@ router.post("/:id/quote", async (req, res) => {
       return res.status(404).json({ error: "Request not found" });
     }
 
+    if (request.buildos_event !== "rfq.sent") {
+      return res.status(409).json({
+        error:
+          "Only a BuildOS RFQ can receive a quote. This request is informational until Procurement sends an RFQ.",
+      });
+    }
+    if (!request.buildos_ref) {
+      return res.status(422).json({ error: "This RFQ is missing its BuildOS reference." });
+    }
+
     if (!isBuildosConfigured()) return res.status(503).json({ error: "BuildOS integration is not configured" });
 
     let profile = null;
@@ -123,19 +133,16 @@ router.post("/:id/quote", async (req, res) => {
     }
 
     const ref = request.buildos_ref || null;
-    const event = request.buildos_event || "";
     const supplierName = profile?.name || request.requester?.name || "Supplier";
     const supplierId = profile?.buildos_supplier_id || null;
     const lines = Array.isArray(items) ? items : [];
     const noteParts = [];
-    if (event === "purchase-order.created" && ref) noteParts.push(`PO ${ref}`);
     if (notes) noteParts.push(notes);
 
     const buildos = await buildosFetch("/received-quotes", {
       method: "POST",
       body: {
-        rfqRef: event === "rfq.sent" ? ref : null,
-        prRef: event === "purchase-request.created" ? ref : null,
+        rfqRef: ref,
         supplierName, supplierId, status: "pending_review", items: lines,
         totalValue: Number(totalValue) || 0,
         notes: noteParts.join(" — ") || null,

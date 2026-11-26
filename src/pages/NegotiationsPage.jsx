@@ -6,7 +6,7 @@ import { API_BASE_URL } from "../utils/apiClient";
 const NEGOTIATION_STATUSES = new Set(["negotiating", "accepted", "rejected", "quote_submitted"]);
 const statusConfig = {
   negotiating: { label: "Negotiating", cls: "negotiating", icon: Clock },
-  accepted: { label: "Accepted", cls: "accepted", icon: CheckCircle2 },
+  accepted: { label: "Agreed", cls: "accepted", icon: CheckCircle2 },
   rejected: { label: "Rejected", cls: "rejected", icon: XCircle },
   quote_submitted: { label: "Submitted", cls: "submitted", icon: Clock },
 };

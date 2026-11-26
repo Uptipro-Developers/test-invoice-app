@@ -11,12 +11,27 @@ This project now includes an Express + PostgreSQL backend that stores invoice re
 npm install
 cp .env.example .env
 docker compose up -d
-npm run dev
+npm run dev:server
+npm run dev:client
 ```
 
 Open http://localhost:5173 in your browser.
 
 The API server runs on http://localhost:4000.
+
+For local PostgreSQL with no Supabase account, use:
+
+```bash
+DATABASE_MODE=postgres
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/free_invoice
+DB_SSL=false
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_PUBLISHABLE_KEY=
+```
+
+Production can keep `DATABASE_MODE=supabase`. If `DATABASE_MODE` is omitted,
+the previous URL/key auto-detection behaviour is preserved.
 
 ## Use Supabase Postgres Only (no local DB)
 

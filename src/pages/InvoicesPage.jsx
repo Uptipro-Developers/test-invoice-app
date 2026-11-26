@@ -14,7 +14,7 @@ const statusConfig = {
   saved: { label: "Saved", className: "saved", icon: CheckCircle2 },
   draft: { label: "Draft", className: "draft", icon: Edit },
   negotiating: { label: "Negotiating", className: "negotiating", icon: Clock },
-  accepted: { label: "Approved", className: "accepted", icon: CheckCircle2 },
+  accepted: { label: "Agreed", className: "accepted", icon: CheckCircle2 },
   rejected: { label: "Rejected", className: "rejected", icon: XCircle },
   quote_submitted: { label: "Submitted", className: "submitted", icon: Clock },
   finalized: { label: "Finalized", className: "accepted", icon: CheckCircle2 },

@@ -31,5 +31,8 @@ export function calculateGrandTotal(items) {
  * @returns {string}
  */
 export function formatCurrency(value, locale = 'en-NG', currency = 'NGN') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
+  const number = Number(value);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(
+    Number.isFinite(number) ? number : 0,
+  );
 }

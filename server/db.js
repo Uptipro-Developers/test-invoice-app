@@ -10,7 +10,24 @@ const supabaseKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const useSupabaseApi = Boolean(supabaseUrl && supabaseKey);
+const configuredMode = String(process.env.DATABASE_MODE || "")
+  .trim()
+  .toLowerCase();
+if (configuredMode && !["supabase", "postgres"].includes(configuredMode)) {
+  throw new Error('DATABASE_MODE must be either "supabase" or "postgres".');
+}
+// Preserve the existing production behaviour when DATABASE_MODE is omitted,
+// while allowing local development to force PostgreSQL even if stale Supabase
+// variables are still present in the shell.
+const useSupabaseApi = configuredMode
+  ? configuredMode === "supabase"
+  : Boolean(supabaseUrl && supabaseKey);
+
+if (useSupabaseApi && (!supabaseUrl || !supabaseKey)) {
+  throw new Error(
+    "DATABASE_MODE=supabase requires SUPABASE_URL and a Supabase service/publishable key.",
+  );
+}
 
 const supabase = useSupabaseApi
   ? createClient(supabaseUrl, supabaseKey, {
@@ -121,6 +138,97 @@ export async function initDb() {
       status TEXT NOT NULL DEFAULT 'draft',
       buildos_quote_id TEXT
     )
+  `);
+  await pool.query(`
+    ALTER TABLE invoices
+      ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id),
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft',
+      ADD COLUMN IF NOT EXISTS buildos_quote_id TEXT
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS requests (
+      id BIGSERIAL PRIMARY KEY,
+      profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+      title TEXT,
+      status TEXT NOT NULL DEFAULT 'received',
+      requester JSONB,
+      materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+      pricing JSONB,
+      amount NUMERIC(14, 2),
+      currency TEXT NOT NULL DEFAULT 'NGN',
+      buildos_ref TEXT UNIQUE,
+      buildos_event TEXT,
+      buildos_quote_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE requests
+      ADD COLUMN IF NOT EXISTS profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+      ADD COLUMN IF NOT EXISTS title TEXT,
+      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'received',
+      ADD COLUMN IF NOT EXISTS requester JSONB,
+      ADD COLUMN IF NOT EXISTS materials JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS pricing JSONB,
+      ADD COLUMN IF NOT EXISTS amount NUMERIC(14, 2),
+      ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'NGN',
+      ADD COLUMN IF NOT EXISTS buildos_ref TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_event TEXT,
+      ADD COLUMN IF NOT EXISTS buildos_quote_id TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS requests_buildos_ref_key
+      ON requests(buildos_ref)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS negotiations (
+      id BIGSERIAL PRIMARY KEY,
+      invoice_id BIGINT REFERENCES invoices(id) ON DELETE CASCADE,
+      sender_profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+      proposed_total NUMERIC(14, 2),
+      items JSONB,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE negotiations
+      ADD COLUMN IF NOT EXISTS items JSONB
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS negotiation_messages (
+      id BIGSERIAL PRIMARY KEY,
+      negotiation_id BIGINT REFERENCES negotiations(id) ON DELETE CASCADE,
+      sender_profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id BIGSERIAL PRIMARY KEY,
+      profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+      invoice_id BIGINT REFERENCES invoices(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS invoices_profile_id_idx ON invoices(profile_id);
+    CREATE INDEX IF NOT EXISTS requests_profile_id_idx ON requests(profile_id);
+    CREATE INDEX IF NOT EXISTS negotiations_invoice_id_idx ON negotiations(invoice_id);
+    CREATE INDEX IF NOT EXISTS notifications_profile_id_idx ON notifications(profile_id);
   `);
 }
 
@@ -239,13 +347,15 @@ export async function getInvoices({ page = 1, limit = 20, profileId } = {}) {
     return { invoices: data, total: count };
   }
 
+  const where = profileId ? "WHERE profile_id = $3" : "";
+  const rowValues = profileId ? [limit, offset, profileId] : [limit, offset];
   const [rowsResult, countResult] = await Promise.all([
     pool.query(
       `SELECT id, invoice_number, client_email, sender_company_name, total, currency, template, privacy_policy_accepted, downloaded_at, created_at
-       FROM invoices
+       FROM invoices ${where}
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
-      [limit, offset],
+      rowValues,
     ),
     pool.query(
       profileId

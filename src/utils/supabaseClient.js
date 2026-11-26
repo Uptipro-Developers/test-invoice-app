@@ -1,10 +1,10 @@
 // src/utils/supabaseClient.js
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = "https://tafibcweszimipvhytft.supabase.co";
-// import.meta.env.SUPABASE_URL || import.meta.env.SUPABASE_URL;
-const supabaseKey = "sb_publishable_OhaN625nEpxWFtTN2a3xhw_darbm-fN";
-// import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-//   import.meta.env.SUPABASE_PUBLISHABLE_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Browser data normally goes through Express. Keep this optional so local
+// PostgreSQL-only builds do not require or contact a Supabase project.
+export const supabase =
+  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;

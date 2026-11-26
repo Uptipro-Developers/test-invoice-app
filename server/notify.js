@@ -1,4 +1,4 @@
-import { supabase } from "./db.js";
+import { supabase, pool } from "./db.js";
 import nodemailer from "nodemailer";
 
 const mailer = nodemailer.createTransport({
@@ -33,22 +33,46 @@ export async function notifyProfiles(profileIds, invoiceId, type, message) {
 
   // In-app notifications are always recorded: they are the user's record of what
   // happened on their account, and the preferences govern email delivery.
-  await supabase.from("notifications").insert(
-    profileIds.map((profile_id) => ({
-      profile_id,
-      invoice_id: invoiceId,
-      type,
-      message,
-      read: false,
-    })),
-  );
+  if (supabase) {
+    const { error } = await supabase.from("notifications").insert(
+      profileIds.map((profile_id) => ({
+        profile_id,
+        invoice_id: invoiceId,
+        type,
+        message,
+        read: false,
+      })),
+    );
+    if (error) throw error;
+  } else if (pool) {
+    await Promise.all(
+      profileIds.map((profileId) =>
+        pool.query(
+          `INSERT INTO notifications (profile_id, invoice_id, type, message, read)
+           VALUES ($1, $2, $3, $4, FALSE)`,
+          [profileId, invoiceId, type, message],
+        ),
+      ),
+    );
+  }
 
   // Send emails if SMTP configured
   if (!process.env.SMTP_HOST) return;
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("email, name, settings")
-    .in("id", profileIds);
+  let profiles = [];
+  if (supabase) {
+    const result = await supabase
+      .from("profiles")
+      .select("email, name, settings")
+      .in("id", profileIds);
+    if (result.error) throw result.error;
+    profiles = result.data || [];
+  } else if (pool) {
+    const result = await pool.query(
+      `SELECT email, name, settings FROM profiles WHERE id = ANY($1::uuid[])`,
+      [profileIds],
+    );
+    profiles = result.rows;
+  }
   for (const p of profiles || []) {
     if (!emailAllowed(p.settings, type)) continue;
     await mailer.sendMail({

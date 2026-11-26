@@ -30,9 +30,9 @@ app.use(
 const originList = process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGIN;
 const allowedOrigins = originList
   ? originList
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean)
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean)
   : ["http://localhost:5173"];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use((_req, res, next) => {
@@ -144,7 +144,7 @@ app.post("/api/invoices", async (req, res) => {
       sendWhatsApp(
         senderPhone,
         `Hi! Your invoice ${invoiceNumber} (${currency} ${total}) has been created. View and download it here: ${invoiceLink}`,
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     return res.status(201).json({
@@ -167,15 +167,29 @@ app.get("/api/invoices/retrieve", async (req, res) => {
       .status(400)
       .json({ error: "email and invoice_number are required" });
   }
-  const { data, error } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("client_email", email)
-    .eq("invoice_number", invoice_number)
-    .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
-  if (!data) return res.status(404).json({ error: "Invoice not found" });
-  return res.json(data);
+  try {
+    let data = null;
+    if (supabase) {
+      const result = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("client_email", email)
+        .eq("invoice_number", invoice_number)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      data = result.data;
+    } else if (pool) {
+      const result = await pool.query(
+        `SELECT * FROM invoices WHERE client_email = $1 AND invoice_number = $2 LIMIT 1`,
+        [email, invoice_number],
+      );
+      data = result.rows[0] || null;
+    }
+    if (!data) return res.status(404).json({ error: "Invoice not found" });
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // ── GET /api/invoices/by-profile/:profileId — all invoices for a profile ────
@@ -220,14 +234,21 @@ app.get("/api/invoices/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id || isNaN(id))
     return res.status(400).json({ error: "Invalid invoice ID" });
-  const { data, error } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
-  if (!data) return res.status(404).json({ error: "Invoice not found" });
-  return res.json(data);
+  try {
+    let data = null;
+    if (supabase) {
+      const result = await supabase.from("invoices").select("*").eq("id", id).maybeSingle();
+      if (result.error) throw result.error;
+      data = result.data;
+    } else if (pool) {
+      const result = await pool.query(`SELECT * FROM invoices WHERE id = $1 LIMIT 1`, [id]);
+      data = result.rows[0] || null;
+    }
+    if (!data) return res.status(404).json({ error: "Invoice not found" });
+    return res.json(data);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // ── POST /api/invoices/:id/email-pdf — email a PDF to the profile's email ───
@@ -242,13 +263,23 @@ app.post("/api/invoices/:id/email-pdf", async (req, res) => {
 
   try {
     // Fetch profile email
-    const { data: profile, error: pErr } = await supabase
-      .from("profiles")
-      .select("email, name")
-      .eq("id", profileId)
-      .maybeSingle();
-    if (pErr || !profile)
-      return res.status(404).json({ error: "Profile not found" });
+    let profile = null;
+    if (supabase) {
+      const result = await supabase
+        .from("profiles")
+        .select("email, name")
+        .eq("id", profileId)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      profile = result.data;
+    } else if (pool) {
+      const result = await pool.query(
+        `SELECT email, name FROM profiles WHERE id = $1 LIMIT 1`,
+        [profileId],
+      );
+      profile = result.rows[0] || null;
+    }
+    if (!profile) return res.status(404).json({ error: "Profile not found" });
 
     if (!process.env.RESEND_API_KEY) {
       return res.status(503).json({ error: "Email service not configured" });
@@ -317,26 +348,66 @@ app.patch("/api/invoices/:id", async (req, res) => {
   if (payload !== undefined) updates.payload = payload;
   if (status !== undefined) updates.status = status;
 
-  let query = supabase.from("invoices").update(updates).eq("id", id);
-  // Restrict update to the owning profile for security
-  if (profileId) query = query.eq("profile_id", profileId);
-
-  const { data, error } = await query.select().single();
-  if (error) return res.status(400).json({ error: error.message });
-  return res.json(data);
+  try {
+    if (supabase) {
+      let query = supabase.from("invoices").update(updates).eq("id", id);
+      if (profileId) query = query.eq("profile_id", profileId);
+      const { data, error } = await query.select().single();
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    }
+    if (pool) {
+      const keys = Object.keys(updates);
+      if (!keys.length) return res.status(400).json({ error: "No updates supplied" });
+      const values = keys.map((key) =>
+        key === "payload" ? JSON.stringify(updates[key]) : updates[key],
+      );
+      const sets = keys.map((key, index) => `${key} = $${index + 1}`).join(", ");
+      values.push(id);
+      let where = `id = $${values.length}`;
+      if (profileId) {
+        values.push(profileId);
+        where += ` AND profile_id = $${values.length}`;
+      }
+      const result = await pool.query(
+        `UPDATE invoices SET ${sets} WHERE ${where} RETURNING *`,
+        values,
+      );
+      if (!result.rows[0]) return res.status(404).json({ error: "Invoice not found" });
+      return res.json(result.rows[0]);
+    }
+    return res.status(503).json({ error: "Database not configured" });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
 });
 
 // ── POST /api/invoices/:id/finalize — lock invoice after quote acceptance ────
 app.post("/api/invoices/:id/finalize", async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await supabase
-    .from("invoices")
-    .update({ status: "finalized" })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) return res.status(400).json({ error: error.message });
-  return res.json(data);
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("invoices")
+        .update({ status: "finalized" })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) return res.status(400).json({ error: error.message });
+      return res.json(data);
+    }
+    if (pool) {
+      const result = await pool.query(
+        `UPDATE invoices SET status = 'finalized' WHERE id = $1 RETURNING *`,
+        [id],
+      );
+      if (!result.rows[0]) return res.status(404).json({ error: "Invoice not found" });
+      return res.json(result.rows[0]);
+    }
+    return res.status(503).json({ error: "Database not configured" });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
 });
 
 app.use("/api/auth", authRoutes);

@@ -71,7 +71,11 @@ function isSupplierProfile(profile) {
 export async function syncSupplierToBuildos(profile, { force = false } = {}) {
   const hasRef = Boolean(String(profile?.buildos_supplier_ref || "").trim());
   const eligible = force || isSupplierProfile(profile) || hasRef;
-  if (!isBuildosConfigured() || !eligible || profile.buildos_supplier_id) {
+  if (
+    !isBuildosConfigured() ||
+    !eligible ||
+    (!force && profile.buildos_supplier_id)
+  ) {
     return profile;
   }
 
@@ -80,7 +84,7 @@ export async function syncSupplierToBuildos(profile, { force = false } = {}) {
       method: "POST",
       body: {
         sabiquotProfileId: profile.id,
-        name: profile.company || profile.name,
+        companyName: String(profile.company || "").trim() || undefined,
         email: profile.email,
         phone: profile.phone,
         contactPerson: profile.name,
@@ -93,6 +97,11 @@ export async function syncSupplierToBuildos(profile, { force = false } = {}) {
         .from("profiles")
         .update({
           buildos_supplier_id: supplier.id,
+          // If SabiQuote has no business name, adopt the existing BuildOS
+          // company name returned by the claimed supplier record.
+          ...(!String(profile.company || "").trim() && supplier.name
+            ? { company: supplier.name }
+            : {}),
           buildos_sync_status: "linked",
           buildos_sync_error: null,
           buildos_synced_at: new Date().toISOString(),
@@ -110,9 +119,16 @@ export async function syncSupplierToBuildos(profile, { force = false } = {}) {
     if (pool) {
       const { rows } = await pool.query(
         `UPDATE profiles
-         SET buildos_supplier_id = $1, buildos_sync_status = 'linked', buildos_sync_error = NULL, buildos_synced_at = NOW()
-         WHERE id = $2 RETURNING *`,
-        [supplier.id, profile.id],
+         SET buildos_supplier_id = $1,
+             company = CASE
+               WHEN NULLIF(BTRIM(COALESCE(company, '')), '') IS NULL THEN $2
+               ELSE company
+             END,
+             buildos_sync_status = 'linked',
+             buildos_sync_error = NULL,
+             buildos_synced_at = NOW()
+         WHERE id = $3 RETURNING *`,
+        [supplier.id, supplier.name || null, profile.id],
       );
       return rows[0] || profile;
     }

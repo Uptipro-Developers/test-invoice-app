@@ -52,6 +52,10 @@ function normalizeRequest(r) {
   };
 }
 
+function isQuotableRequest(request) {
+  return request?.buildos_event === "rfq.sent";
+}
+
 export default function RequestsPage({ profile }) {
   const [requests, setRequests] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -251,6 +255,10 @@ export default function RequestsPage({ profile }) {
   }
 
   function handleSubmit(request) {
+    if (!isQuotableRequest(request)) {
+      alert("This item is informational. Procurement must send an RFQ before you can submit a quote.");
+      return;
+    }
     const hasAllPrices = (request.pricing?.items ?? []).every(
       (item) => item.unitPrice > 0,
     );
@@ -343,7 +351,7 @@ export default function RequestsPage({ profile }) {
         <div>
           <p className={styles.kicker}>Requests</p>
           <h1 className={styles.pageTitle}>Requests</h1>
-          <p className={styles.pageSubtitle}>Review ERP requests, add pricing, and send quotes or invoices.</p>
+          <p className={styles.pageSubtitle}>Review ERP requests and respond to RFQs with priced quotes.</p>
         </div>
       </header>
 
@@ -632,14 +640,15 @@ export default function RequestsPage({ profile }) {
 
                       {/* Actions */}
                       {(request.status === "pending" ||
-                        request.status === "received") && (
+                        request.status === "received") &&
+                        isQuotableRequest(request) && (
                         <div className={styles.actionButtons}>
                           <button
                             className={styles.submitButton}
                             onClick={() => handleSubmit(request)}
                           >
                             <CheckCircle2 size={18} />
-                            Submit Invoice
+                            Submit Quote
                           </button>
                           <button
                             className={styles.secondaryActionButton}
@@ -654,6 +663,15 @@ export default function RequestsPage({ profile }) {
                           </button>
                         </div>
                       )}
+                      {(request.status === "pending" ||
+                        request.status === "received") &&
+                        !isQuotableRequest(request) && (
+                          <p style={{ margin: "18px 0 0", color: "#64748b", fontSize: 14 }}>
+                            {request.buildos_event === "purchase-order.created"
+                              ? "This is a purchase order, not a request for quotation."
+                              : "Awaiting an RFQ from BuildOS Procurement before pricing can be submitted."}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>
@@ -700,11 +718,8 @@ export default function RequestsPage({ profile }) {
 
             <div style={{ padding: "18px 24px" }}>
               <p style={{ margin: "0 0 14px", fontSize: 14, color: "#444" }}>
-                Your priced response will be sent back to BuildOS
-                {submitRequest.buildos_event === "purchase-order.created"
-                  ? " as a purchase invoice"
-                  : " as a received quote"}
-                , and the invoice builder will open pre-filled.
+                Your priced response will be sent back to BuildOS as a received
+                quote linked to this RFQ.
               </p>
 
               <div style={{ fontSize: 14, color: "#444" }}>
